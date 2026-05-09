@@ -1,5 +1,5 @@
 {
-  "name": "WF-01: Message Router",
+  "name": "WF-01: Message Router — TILLU Brain",
   "nodes": [
     {
       "parameters": {
@@ -11,56 +11,97 @@
       "name": "Receive Message",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [250, 300],
+      "position": [200, 400],
       "webhookId": "message"
     },
     {
       "parameters": {
-        "functionCode": "// Extract message data\nconst message = $input.first().json;\n\nreturn {\n  json: {\n    user_id: message.user_id,\n    message_type: message.type,\n    text: message.text || '',\n    media_url: message.media_url || null,\n    session_id: message.session_id || null,\n    client_id: message.client_id || null\n  }\n};"
+        "functionCode": "// ── TILLU Input Normalizer ──────────────────────────────────────\n// Normalize incoming message from any client (WhatsApp, Web, Mobile)\nconst msg = $input.first().json;\nconst now = new Date();\n\n// Detect script: Devanagari = Hindi\nconst hindiPattern = /[\\u0900-\\u097F]/;\nconst detectedLang = hindiPattern.test(msg.text || '') ? 'hi' : 'en';\n\n// Time-of-day context\nconst hour = now.getHours();\nlet period = 'day';\nif (hour >= 5 && hour < 12) period = 'morning';\nelse if (hour >= 12 && hour < 17) period = 'afternoon';\nelse if (hour >= 17 && hour < 21) period = 'evening';\nelse period = 'night';\n\nreturn {\n  json: {\n    user_id: msg.user_id || 'default',\n    text: (msg.text || '').trim(),\n    media_url: msg.media_url || null,\n    session_id: msg.session_id || `sess_${Date.now()}`,\n    client_id: msg.client_id || 'web',\n    detected_lang: detectedLang,\n    time_period: period,\n    timestamp: now.toISOString(),\n    raw: msg\n  }\n};"
       },
-      "id": "extract-data",
-      "name": "Extract Data",
+      "id": "normalize-input",
+      "name": "Normalize Input",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [450, 300]
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/recent",
+        "method": "GET",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "user_id", "value": "={{ $json.user_id }}" },
+            { "name": "limit", "value": "20" }
+          ]
+        },
+        "options": { "timeout": 5000 }
+      },
+      "id": "fetch-recent-memory",
+      "name": "Fetch Recent Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/semantic-search",
+        "method": "POST",
+        "body": {
+          "user_id": "={{ $json.user_id }}",
+          "query": "={{ $json.text }}",
+          "limit": 5,
+          "threshold": 0.72
+        },
+        "options": { "timeout": 8000 }
+      },
+      "id": "semantic-memory-search",
+      "name": "Semantic Memory Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [600, 400]
     },
     {
       "parameters": {
         "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/classify",
         "method": "POST",
         "body": {
-          "text": "={{ $json.text }}"
-        }
+          "text": "={{ $json.text }}",
+          "lang": "={{ $json.detected_lang }}"
+        },
+        "options": { "timeout": 6000 }
       },
       "id": "classify-intent",
-      "name": "Classify Intent (HF)",
+      "name": "Classify Intent",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [650, 200]
+      "position": [600, 600]
     },
     {
       "parameters": {
         "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/emotion",
         "method": "POST",
         "body": {
-          "text": "={{ $json.text }}"
-        }
+          "text": "={{ $json.text }}",
+          "lang": "={{ $json.detected_lang }}"
+        },
+        "options": { "timeout": 6000 }
       },
       "id": "detect-emotion",
-      "name": "Emotion Detect (HF)",
+      "name": "Detect Emotion + Stress",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [650, 400]
+      "position": [600, 800]
     },
     {
       "parameters": {
-        "functionCode": "// Merge classification and emotion results\nconst intent = $input.all()[0].json;\nconst emotion = $input.all()[1].json;\n\n// Determine route\nlet chain = 'conversational';\nconst intentClass = intent.intent_class;\nconst stressLevel = emotion.stress_level;\n\nif (intentClass === 'research_request' || intentClass === 'deep_analysis') {\n  chain = 'research';\n} else if (intentClass === 'action_required' || intentClass === 'multi_step_task') {\n  chain = 'react_agent';\n} else if (intentClass === 'pattern_query' || intentClass === 'data_analysis') {\n  chain = 'analysis';\n} else if (stressLevel === 'high' || intentClass === 'distress') {\n  chain = 'empathy';\n}\n\nreturn {\n  json: {\n    user_id: $input.first().json.user_id,\n    text: $input.first().json.text,\n    message_type: $input.first().json.message_type,\n    session_id: $input.first().json.session_id,\n    intent_class: intentClass,\n    emotion_scores: emotion.scores,\n    stress_level: stressLevel,\n    target_chain: chain\n  }\n};"
+        "functionCode": "// ── TILLU Brain Router ──────────────────────────────────────────\n// Merge all parallel results and decide which chain to invoke\nconst all = $input.all();\n\n// Find each result by node name (order may vary)\nconst find = (name) => all.find(i => i.pairedItem?.node === name)?.json || {};\n\nconst base = all[0].json;  // normalized input (passed through)\nconst recentMem = find('Fetch Recent Memory');\nconst semanticMem = find('Semantic Memory Search');\nconst intent = find('Classify Intent');\nconst emotion = find('Detect Emotion + Stress');\n\nconst intentClass = intent.intent_class || 'small_talk';\nconst stressLevel = emotion.stress_level || 'low';\nconst dominantEmotion = emotion.dominant_emotion || 'neutral';\nconst lang = base.detected_lang || 'en';\n\n// ── Chain selection logic ────────────────────────────────────────\nlet chain = 'conversational';\nlet priority = 'normal';\n\nif (stressLevel === 'high' || intentClass === 'distress' || dominantEmotion === 'sadness') {\n  chain = 'empathy';\n  priority = 'urgent';\n} else if (intentClass === 'research_request' || intentClass === 'deep_analysis') {\n  chain = 'research';\n} else if (intentClass === 'action_required' || intentClass === 'multi_step_task') {\n  chain = 'react_agent';\n} else if (intentClass === 'pattern_query' || intentClass === 'data_analysis') {\n  chain = 'analysis';\n} else if (intentClass === 'memory_query') {\n  chain = 'memory_recall';\n} else if (intentClass === 'web_search') {\n  chain = 'research';  // research chain uses web search tool\n}\n\n// ── Memory context assembly ──────────────────────────────────────\nconst memoryContext = {\n  recent_turns: recentMem.interactions || [],\n  semantic_matches: semanticMem.results || [],\n  turn_count: (recentMem.interactions || []).length\n};\n\nreturn {\n  json: {\n    // Original input\n    user_id: base.user_id,\n    text: base.text,\n    session_id: base.session_id,\n    client_id: base.client_id,\n    timestamp: base.timestamp,\n    // Language\n    lang: lang,\n    time_period: base.time_period,\n    // Intelligence\n    intent_class: intentClass,\n    emotion_scores: emotion.scores || {},\n    dominant_emotion: dominantEmotion,\n    stress_level: stressLevel,\n    // Routing\n    target_chain: chain,\n    priority: priority,\n    // Memory\n    memory_context: memoryContext\n  }\n};"
       },
-      "id": "route-chain",
-      "name": "Route to Chain",
+      "id": "brain-router",
+      "name": "TILLU Brain Router",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [850, 300]
+      "position": [850, 500]
     },
     {
       "parameters": {
@@ -68,25 +109,34 @@
         "method": "POST",
         "body": {
           "chain": "={{ $json.target_chain }}",
-          "input": "={{ $json }}",
+          "input": "={{ $json.text }}",
+          "user_id": "={{ $json.user_id }}",
+          "session_id": "={{ $json.session_id }}",
+          "lang": "={{ $json.lang }}",
+          "intent_class": "={{ $json.intent_class }}",
+          "emotion": "={{ $json.dominant_emotion }}",
+          "stress_level": "={{ $json.stress_level }}",
+          "memory_context": "={{ $json.memory_context }}",
+          "time_period": "={{ $json.time_period }}",
           "context_assemble": true
-        }
+        },
+        "options": { "timeout": 30000 }
       },
       "id": "execute-chain",
       "name": "Execute Chain",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [1050, 300]
+      "position": [1100, 500]
     },
     {
       "parameters": {
-        "functionCode": "// Apply personality compilation\nconst response = $input.first().json;\nconst context = response.context || {};\n\n// Determine personality mode\nlet mode = 'sharp';\nconst stress = context.emotional?.stress_level;\nconst period = context.temporal?.period;\n\nif (stress === 'high') {\n  mode = 'empathic';\n} else if (period === 'morning') {\n  mode = 'energetic';\n} else if (period === 'evening') {\n  mode = 'warm';\n}\n\nreturn {\n  json: {\n    ...response,\n    personality_mode: mode,\n    response_text: response.content,\n    tillu_message: response.content  // Personality-applied\n  }\n};"
+        "functionCode": "// ── Personality Compiler ────────────────────────────────────────\n// Apply TILLU's personality based on context\nconst response = $input.first().json;\nconst chain_input = $node['TILLU Brain Router'].json;\n\nconst stress = chain_input.stress_level;\nconst period = chain_input.time_period;\nconst lang = chain_input.lang;\nconst emotion = chain_input.dominant_emotion;\n\n// Personality mode selection\nlet mode = 'sharp';\nif (stress === 'high' || emotion === 'sadness') mode = 'empathic';\nelse if (period === 'morning') mode = 'energetic';\nelse if (period === 'evening' || period === 'night') mode = 'warm';\nelse if (emotion === 'joy') mode = 'playful';\n\n// Language-aware response prefix (subtle, not forced)\nconst langNote = lang === 'hi' ? 'hindi_primary' : 'english_primary';\n\nreturn {\n  json: {\n    // Response\n    response_text: response.content || response.response || '',\n    chain_used: chain_input.target_chain,\n    // Metadata\n    personality_mode: mode,\n    lang: lang,\n    lang_mode: langNote,\n    session_id: chain_input.session_id,\n    user_id: chain_input.user_id,\n    intent_class: chain_input.intent_class,\n    // For storage\n    interaction_data: {\n      user_id: chain_input.user_id,\n      session_id: chain_input.session_id,\n      user_message: chain_input.text,\n      tillu_response: response.content || response.response || '',\n      chain: chain_input.target_chain,\n      intent: chain_input.intent_class,\n      emotion: chain_input.dominant_emotion,\n      stress: chain_input.stress_level,\n      lang: lang,\n      quality_score: response.quality_score || null,\n      timestamp: chain_input.timestamp\n    }\n  }\n};"
       },
-      "id": "apply-personality",
-      "name": "Apply Personality",
+      "id": "personality-compiler",
+      "name": "Personality Compiler",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1250, 300]
+      "position": [1300, 500]
     },
     {
       "parameters": {
@@ -96,44 +146,87 @@
       "name": "Respond to Client",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1450, 300]
+      "position": [1500, 400]
     },
     {
       "parameters": {
-        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/store-interaction",
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/store-interaction",
         "method": "POST",
-        "body": "={{ $json }}"
+        "body": "={{ $json.interaction_data }}",
+        "options": { "timeout": 10000 }
       },
-      "id": "store-async",
-      "name": "Store Async",
+      "id": "store-memory",
+      "name": "Store to Memory (Async)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [1450, 500]
+      "position": [1500, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/embed-and-index",
+        "method": "POST",
+        "body": {
+          "user_id": "={{ $json.interaction_data.user_id }}",
+          "text": "={{ $json.interaction_data.user_message + ' ' + $json.interaction_data.tillu_response }}",
+          "metadata": {
+            "session_id": "={{ $json.interaction_data.session_id }}",
+            "intent": "={{ $json.interaction_data.intent }}",
+            "lang": "={{ $json.interaction_data.lang }}"
+          }
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "embed-and-index",
+      "name": "Embed + Index Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1700, 600]
     },
     {
       "parameters": {
         "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/self-critique",
         "method": "POST",
         "body": {
-          "interaction_id": "={{ $json.id }}"
-        }
+          "user_message": "={{ $json.interaction_data.user_message }}",
+          "tillu_response": "={{ $json.interaction_data.tillu_response }}",
+          "chain": "={{ $json.interaction_data.chain }}",
+          "lang": "={{ $json.interaction_data.lang }}"
+        },
+        "options": { "timeout": 10000 }
       },
       "id": "self-critique",
       "name": "Self-Critique (Async)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [1650, 500]
+      "position": [1700, 750]
     }
   ],
-  "pinData": {},
-  "settings": {
-    "executionOrder": "v1"
+  "connections": {
+    "Receive Message": { "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]] },
+    "Normalize Input": {
+      "main": [[
+        { "node": "Fetch Recent Memory", "type": "main", "index": 0 },
+        { "node": "Semantic Memory Search", "type": "main", "index": 0 },
+        { "node": "Classify Intent", "type": "main", "index": 0 },
+        { "node": "Detect Emotion + Stress", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Recent Memory": { "main": [[{ "node": "TILLU Brain Router", "type": "main", "index": 0 }]] },
+    "Semantic Memory Search": { "main": [[{ "node": "TILLU Brain Router", "type": "main", "index": 0 }]] },
+    "Classify Intent": { "main": [[{ "node": "TILLU Brain Router", "type": "main", "index": 0 }]] },
+    "Detect Emotion + Stress": { "main": [[{ "node": "TILLU Brain Router", "type": "main", "index": 0 }]] },
+    "TILLU Brain Router": { "main": [[{ "node": "Execute Chain", "type": "main", "index": 0 }]] },
+    "Execute Chain": { "main": [[{ "node": "Personality Compiler", "type": "main", "index": 0 }]] },
+    "Personality Compiler": {
+      "main": [[
+        { "node": "Respond to Client", "type": "main", "index": 0 },
+        { "node": "Store to Memory (Async)", "type": "main", "index": 0 }
+      ]]
+    },
+    "Store to Memory (Async)": { "main": [[{ "node": "Embed + Index Memory", "type": "main", "index": 0 }]] },
+    "Embed + Index Memory": { "main": [[{ "node": "Self-Critique (Async)", "type": "main", "index": 0 }]] }
   },
-  "staticData": null,
-  "tags": [
-    {
-      "name": "core",
-      "id": "core-tag"
-    }
-  ]
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "core", "id": "core-tag" }, { "name": "memory", "id": "memory-tag" }]
 }

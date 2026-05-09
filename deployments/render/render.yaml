@@ -90,33 +90,21 @@ services:
         sync: false
 
   # ═══════════════════════════════════════════════════════════════
-  # TILLU SEARCH - SearXNG
+  # TILLU WEBSEARCH — Unified Search + Scrape (replaces SearXNG + Playwright)
+  # Endpoints: /search  /scrape  /search-and-scrape
+  # Hindi + English bilingual, Brave API → DuckDuckGo fallback
   # ═══════════════════════════════════════════════════════════════
   - type: web
-    name: tillu-search
+    name: tillu-websearch
     runtime: docker
     plan: free
-    autoDeploy: false
-    dockerfilePath: ./deployments/render/Dockerfile.searxng
+    autoDeploy: true
+    dockerfilePath: ./deployments/render/Dockerfile.websearch
     envVars:
-      - key: INSTANCE_NAME
-        value: tillu-search
-      - key: BASE_URL
-        value: https://tillu-search.onrender.com
-    healthCheckPath: /healthz
-
-  # ═══════════════════════════════════════════════════════════════
-  # TILLU SCRAPER - Playwright Service
-  # ═══════════════════════════════════════════════════════════════
-  - type: web
-    name: tillu-scraper
-    runtime: docker
-    plan: free
-    autoDeploy: false
-    dockerfilePath: ./deployments/render/Dockerfile.playwright
-    envVars:
-      - key: PORT
-        value: 3001
+      - key: BRAVE_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
     healthCheckPath: /health
 
 # ═══════════════════════════════════════════════════════════════════
@@ -139,10 +127,10 @@ jobs:
     buildCommand: "pip install httpx"
     startCommand: "python -c \"import httpx; httpx.get('https://tillu-engine.onrender.com/healthz', timeout=30)\""
 
-  - name: keepalive-search
+  - name: keepalive-websearch
     type: cron
     runtime: python
     plan: free
     schedule: "*/10 * * * *"
     buildCommand: "pip install httpx"
-    startCommand: "python -c \"import httpx; httpx.get('https://tillu-search.onrender.com/healthz', timeout=30)\""
+    startCommand: "python -c \"import httpx; httpx.get('https://tillu-websearch.onrender.com/health', timeout=30)\""

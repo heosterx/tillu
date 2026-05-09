@@ -1,0 +1,124 @@
+{
+  "name": "WF-09: Memory Consolidation — Daily",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hours": 0, "minutes": 0 }] }
+      },
+      "id": "schedule-midnight",
+      "name": "Daily 00:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/get-unconsolidated",
+        "method": "GET",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "since_hours", "value": "24" },
+            { "name": "limit", "value": "200" }
+          ]
+        }
+      },
+      "id": "fetch-raw-interactions",
+      "name": "Fetch Raw Interactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Group interactions by session for consolidation\nconst interactions = $input.first().json.interactions || [];\n\nif (interactions.length === 0) {\n  return [{ json: { skip: true, reason: 'No interactions to consolidate' } }];\n}\n\n// Group by session\nconst sessions = {};\nfor (const i of interactions) {\n  const key = i.session_id || 'default';\n  if (!sessions[key]) sessions[key] = [];\n  sessions[key].push(i);\n}\n\n// Build consolidation batches\nconst batches = Object.entries(sessions).map(([session_id, items]) => ({\n  session_id,\n  user_id: items[0].user_id,\n  interaction_count: items.length,\n  interactions: items,\n  date: new Date().toISOString().split('T')[0]\n}));\n\nreturn batches.map(b => ({ json: b }));"
+      },
+      "id": "group-by-session",
+      "name": "Group by Session",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/chains/memory-consolidation",
+        "method": "POST",
+        "body": {
+          "user_id": "={{ $json.user_id }}",
+          "session_id": "={{ $json.session_id }}",
+          "interactions": "={{ $json.interactions }}",
+          "date": "={{ $json.date }}"
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "run-consolidation-chain",
+      "name": "Run Consolidation Chain (Groq 70B)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [800, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/store-summary",
+        "method": "POST",
+        "body": {
+          "user_id": "={{ $json.user_id }}",
+          "session_id": "={{ $json.session_id }}",
+          "summary": "={{ $json.summary }}",
+          "key_facts": "={{ $json.key_facts }}",
+          "emotional_arc": "={{ $json.emotional_arc }}",
+          "topics": "={{ $json.topics }}",
+          "date": "={{ $json.date }}"
+        }
+      },
+      "id": "store-consolidated-summary",
+      "name": "Store Consolidated Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1000, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/embed-summary",
+        "method": "POST",
+        "body": {
+          "user_id": "={{ $json.user_id }}",
+          "summary_id": "={{ $json.summary_id }}",
+          "text": "={{ $json.summary }}"
+        }
+      },
+      "id": "embed-summary",
+      "name": "Embed Summary (HF Space)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/update-user-profile",
+        "method": "POST",
+        "body": {
+          "user_id": "={{ $json.user_id }}",
+          "new_facts": "={{ $json.key_facts }}",
+          "topics": "={{ $json.topics }}"
+        }
+      },
+      "id": "update-user-profile",
+      "name": "Update User Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1400, 400]
+    }
+  ],
+  "connections": {
+    "Daily 00:00": { "main": [[{ "node": "Fetch Raw Interactions", "type": "main", "index": 0 }]] },
+    "Fetch Raw Interactions": { "main": [[{ "node": "Group by Session", "type": "main", "index": 0 }]] },
+    "Group by Session": { "main": [[{ "node": "Run Consolidation Chain (Groq 70B)", "type": "main", "index": 0 }]] },
+    "Run Consolidation Chain (Groq 70B)": { "main": [[{ "node": "Store Consolidated Summary", "type": "main", "index": 0 }]] },
+    "Store Consolidated Summary": { "main": [[{ "node": "Embed Summary (HF Space)", "type": "main", "index": 0 }]] },
+    "Embed Summary (HF Space)": { "main": [[{ "node": "Update User Profile", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "memory", "id": "memory-tag" }]
+}
