@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     google_client_secret: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
     gmail_refresh_token: Optional[str] = Field(default=None, alias="GMAIL_REFRESH_TOKEN")
 
+    # Cloudflare AI Gateway
+    cf_api_token: Optional[str] = Field(default=None, alias="CF_API_TOKEN")
+    cf_account_id: Optional[str] = Field(default=None, alias="CF_ACCOUNT_ID")
+    cf_gateway_id: str = Field(default="default", alias="CF_GATEWAY_ID")
+
     # Notion
     notion_token: Optional[str] = Field(default=None, alias="NOTION_TOKEN")
     

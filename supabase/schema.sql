@@ -5,7 +5,7 @@
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgvector";
+CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- ============================================================================
 -- CORE TABLES
@@ -735,16 +735,19 @@ CREATE POLICY client_registry_isolation ON client_registry
 
 -- Service role bypass (for backend processes)
 CREATE POLICY service_role_bypass_user_profile ON user_profile
-    FOR ALL USING (true)
-    TO service_role;
+    FOR ALL
+    TO service_role
+    USING (true);
 
 CREATE POLICY service_role_bypass_interactions ON interactions
-    FOR ALL USING (true)
-    TO service_role;
+    FOR ALL
+    TO service_role
+    USING (true);
 
 CREATE POLICY service_role_bypass_knowledge_base ON knowledge_base
-    FOR ALL USING (true)
-    TO service_role;
+    FOR ALL
+    TO service_role
+    USING (true);
 
 -- (Additional service role policies for other tables as needed)
 
@@ -792,7 +795,7 @@ CREATE INDEX IF NOT EXISTS idx_emails_received ON emails(received_at);
 
 ALTER TABLE emails ENABLE ROW LEVEL SECURITY;
 CREATE POLICY emails_isolation ON emails FOR ALL USING (user_id = auth.uid());
-CREATE POLICY service_role_bypass_emails ON emails FOR ALL USING (true) TO service_role;
+CREATE POLICY service_role_bypass_emails ON emails FOR ALL TO service_role USING (true);
 
 -- ============================================================================
 -- HELPER FUNCTIONS
@@ -822,28 +825,28 @@ $$ LANGUAGE plpgsql;
 
 -- Service role bypass for emails and system tables
 CREATE POLICY service_role_bypass_event_queue ON event_queue
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_news_articles ON news_articles
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_research_sessions ON research_sessions
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_tasks_goals ON tasks_goals
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_emotion_log ON emotion_log
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_financial_tracking ON financial_tracking
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_web_monitors ON web_monitors
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_people_knowledge ON people_knowledge
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);
 
 CREATE POLICY service_role_bypass_client_registry ON client_registry
-    FOR ALL USING (true) TO service_role;
+    FOR ALL TO service_role USING (true);

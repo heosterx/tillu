@@ -190,6 +190,35 @@
     }
   ],
   "pinData": {},
+  "connections": {
+    "Daily 07:00": {
+      "main": [[{ "node": "Fetch Active Users", "type": "main", "index": 0 }]]
+    },
+    "Fetch Active Users": {
+      "main": [[{ "node": "Split Users", "type": "main", "index": 0 }]]
+    },
+    "Split Users": {
+      "main": [[
+        { "node": "Fetch Weather", "type": "main", "index": 0 },
+        { "node": "Fetch Calendar", "type": "main", "index": 0 },
+        { "node": "Fetch Tasks", "type": "main", "index": 0 },
+        { "node": "Fetch News", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Weather":  { "main": [[{ "node": "Compile Brief Data", "type": "main", "index": 0 }]] },
+    "Fetch Calendar": { "main": [[{ "node": "Compile Brief Data", "type": "main", "index": 0 }]] },
+    "Fetch Tasks":    { "main": [[{ "node": "Compile Brief Data", "type": "main", "index": 0 }]] },
+    "Fetch News":     { "main": [[{ "node": "Compile Brief Data", "type": "main", "index": 0 }]] },
+    "Compile Brief Data": {
+      "main": [[{ "node": "Synthesize (Groq 70B)", "type": "main", "index": 0 }]]
+    },
+    "Synthesize (Groq 70B)": {
+      "main": [[{ "node": "Apply Personality", "type": "main", "index": 0 }]]
+    },
+    "Apply Personality": {
+      "main": [[{ "node": "Publish to Redis", "type": "main", "index": 0 }]]
+    }
+  },
   "settings": {
     "executionOrder": "v1"
   },

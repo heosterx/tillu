@@ -15,7 +15,7 @@
 #   N8N_BASIC_AUTH_PASSWORD  — your strong password
 #   WEBHOOK_URL              — https://tillu-ai-tillu-engine.hf.space
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 USER root
 
@@ -44,8 +44,8 @@ RUN cp /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# ── n8n install ───────────────────────────────────────────────────────────────
-RUN npm install -g n8n@latest
+# ── n8n install — pinned to last stable release on Node 22 ───────────────────
+RUN npm install -g n8n@2.16.1 --ignore-scripts=false
 
 # ── n8n data directory ────────────────────────────────────────────────────────
 ARG BASE_PATH=/root/.n8n
@@ -55,7 +55,6 @@ RUN mkdir -p $BASE_PATH/workflows && chmod -R 777 $BASE_PATH
 COPY workflows/ /root/.n8n/workflows/
 
 # ── n8n configuration ─────────────────────────────────────────────────────────
-# These are defaults — override via HF Space Secrets
 ENV N8N_PORT=7860
 ENV N8N_PROTOCOL=https
 ENV N8N_HOST=0.0.0.0
@@ -67,10 +66,11 @@ ENV N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 ENV EXECUTIONS_DATA_PRUNE=true
 ENV EXECUTIONS_DATA_MAX_AGE=168
 
-# Database: Supabase PostgreSQL (set via HF Secrets)
-ENV DB_TYPE=postgresdb
-ENV DB_POSTGRESDB_PORT=5432
-ENV DB_POSTGRESDB_SCHEMA=n8n
+# Use SQLite — no external DB needed for n8n's own storage.
+# TILLU data lives in Supabase; n8n only needs SQLite for workflows/credentials.
+# Workflows are baked into the image so nothing is lost on restart.
+ENV DB_TYPE=sqlite
+ENV DB_SQLITE_VACUUM_ON_STARTUP=true
 
 # Basic auth (set via HF Secrets)
 ENV N8N_BASIC_AUTH_ACTIVE=true
