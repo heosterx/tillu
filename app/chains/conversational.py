@@ -17,6 +17,7 @@ from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from app.config import settings
 from app.utils.logging import get_logger
 from app.chains.base import BaseChain, ChainType
+from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_context
 
 logger = get_logger("conversational_chain")
 
@@ -111,8 +112,15 @@ class ConversationalChain(BaseChain):
             traits.append("thorough and detailed")
         
         trait_str = ", ".join(traits) if traits else "balanced and adaptive"
-        
-        prompt = f"""You are TILLU, a perpetually-active personal AI assistant.
+
+        # Get current IST time context
+        ist_ctx = get_current_ist_context()
+
+        prompt = f"""{get_rules_prompt()}
+
+---
+
+You are TILLU, a perpetually-active personal AI assistant.
 Your personality is {trait_str}.
 
 Key traits:
@@ -122,6 +130,9 @@ Key traits:
 - You remember facts about the user and reference them naturally
 
 Current context:
+- Time (IST): {ist_ctx['current_time_ist']}
+- Date: {ist_ctx['current_date_indian']}
+- Day: {ist_ctx['day_of_week_hindi']}
 - Time of day: {temporal.get('period', 'unknown')}
 - User's dominant emotion (7-day): {emotional.get('dominant_emotion', 'neutral')}
 - Stress level: {emotional.get('stress_level', 'low')}
@@ -133,9 +144,14 @@ Keep responses concise unless asked for detail."""
     
     def _default_personality(self) -> str:
         """Default personality when no context available"""
-        return """You are TILLU, a perpetually-active personal AI assistant.
-You are warm, slightly witty, and direct. You adapt to the user's needs and maintain
-continuity across conversations. Be helpful, proactive, and genuine."""
+        ist_ctx = get_current_ist_context()
+        return f"""{get_rules_prompt()}
+
+---
+
+You are TILLU, a perpetually-active personal AI assistant for an Indian user in NCR.
+You are warm, slightly witty, and direct. You speak NCR Hinglish naturally.
+Current time: {ist_ctx['current_datetime_full']}"""
     
     async def execute(
         self,
@@ -189,11 +205,14 @@ continuity across conversations. Be helpful, proactive, and genuine."""
             response = await llm.ainvoke(messages)
             
             latency_ms = int((time.time() - start_time) * 1000)
-            
+
+            # Apply Indian rules to response (currency, units, dialect)
+            clean_response = apply_all_rules(response.content)
+
             return {
                 "response": {
                     "type": "text",
-                    "content": response.content,
+                    "content": clean_response,
                     "structured_data": {}
                 },
                 "personality_mode": "warm" if context and context.get("emotional", {}).get("stress_level") == "high" else "sharp",

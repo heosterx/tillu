@@ -13,6 +13,7 @@ from app.utils.logging import configure_logging, get_logger
 from app.utils.cache import cache
 from app.utils.database import db
 from app.api import gateway_router, memory_router, health_router, events_router
+from app.api.triggers import router as triggers_router
 
 # Configure logging
 configure_logging()
@@ -96,6 +97,7 @@ app.include_router(gateway_router)
 app.include_router(memory_router)
 app.include_router(events_router)
 app.include_router(health_router)
+app.include_router(triggers_router)  # Auto-trigger endpoints (cron-job.org)
 
 # Add Prometheus metrics endpoint
 metrics_app = make_asgi_app()
