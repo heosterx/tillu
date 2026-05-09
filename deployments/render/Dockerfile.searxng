@@ -1,0 +1,15 @@
+# TILLU Search - SearXNG
+FROM searxng/searxng:latest
+
+# Copy custom configuration
+COPY settings.yml /etc/searxng/settings.yml
+
+# Environment
+ENV BASE_URL=${BASE_URL:-http://localhost:8080}
+ENV INSTANCE_NAME=${INSTANCE_NAME:-tillu-search}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1
+
+EXPOSE 8080

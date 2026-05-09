@@ -1,0 +1,7 @@
+# HF Space requirements — do NOT pin gradio here, HF injects gradio[oauth,mcp]==6.x
+# sentence-transformers 2.x requires torch<2.3 and is incompatible with newer builds;
+# use 3.x which supports Python 3.13 and torch 2.x cleanly.
+
+sentence-transformers>=3.0.0
+torch>=2.1.0
+numpy>=1.26.0

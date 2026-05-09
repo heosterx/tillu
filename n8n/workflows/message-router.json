@@ -1,0 +1,139 @@
+{
+  "name": "WF-01: Message Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "message",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-receive",
+      "name": "Receive Message",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "message"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract message data\nconst message = $input.first().json;\n\nreturn {\n  json: {\n    user_id: message.user_id,\n    message_type: message.type,\n    text: message.text || '',\n    media_url: message.media_url || null,\n    session_id: message.session_id || null,\n    client_id: message.client_id || null\n  }\n};"
+      },
+      "id": "extract-data",
+      "name": "Extract Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/classify",
+        "method": "POST",
+        "body": {
+          "text": "={{ $json.text }}"
+        }
+      },
+      "id": "classify-intent",
+      "name": "Classify Intent (HF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/emotion",
+        "method": "POST",
+        "body": {
+          "text": "={{ $json.text }}"
+        }
+      },
+      "id": "detect-emotion",
+      "name": "Emotion Detect (HF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Merge classification and emotion results\nconst intent = $input.all()[0].json;\nconst emotion = $input.all()[1].json;\n\n// Determine route\nlet chain = 'conversational';\nconst intentClass = intent.intent_class;\nconst stressLevel = emotion.stress_level;\n\nif (intentClass === 'research_request' || intentClass === 'deep_analysis') {\n  chain = 'research';\n} else if (intentClass === 'action_required' || intentClass === 'multi_step_task') {\n  chain = 'react_agent';\n} else if (intentClass === 'pattern_query' || intentClass === 'data_analysis') {\n  chain = 'analysis';\n} else if (stressLevel === 'high' || intentClass === 'distress') {\n  chain = 'empathy';\n}\n\nreturn {\n  json: {\n    user_id: $input.first().json.user_id,\n    text: $input.first().json.text,\n    message_type: $input.first().json.message_type,\n    session_id: $input.first().json.session_id,\n    intent_class: intentClass,\n    emotion_scores: emotion.scores,\n    stress_level: stressLevel,\n    target_chain: chain\n  }\n};"
+      },
+      "id": "route-chain",
+      "name": "Route to Chain",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/execute-chain",
+        "method": "POST",
+        "body": {
+          "chain": "={{ $json.target_chain }}",
+          "input": "={{ $json }}",
+          "context_assemble": true
+        }
+      },
+      "id": "execute-chain",
+      "name": "Execute Chain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Apply personality compilation\nconst response = $input.first().json;\nconst context = response.context || {};\n\n// Determine personality mode\nlet mode = 'sharp';\nconst stress = context.emotional?.stress_level;\nconst period = context.temporal?.period;\n\nif (stress === 'high') {\n  mode = 'empathic';\n} else if (period === 'morning') {\n  mode = 'energetic';\n} else if (period === 'evening') {\n  mode = 'warm';\n}\n\nreturn {\n  json: {\n    ...response,\n    personality_mode: mode,\n    response_text: response.content,\n    tillu_message: response.content  // Personality-applied\n  }\n};"
+      },
+      "id": "apply-personality",
+      "name": "Apply Personality",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "respond-to-client",
+      "name": "Respond to Client",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/store-interaction",
+        "method": "POST",
+        "body": "={{ $json }}"
+      },
+      "id": "store-async",
+      "name": "Store Async",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1450, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/self-critique",
+        "method": "POST",
+        "body": {
+          "interaction_id": "={{ $json.id }}"
+        }
+      },
+      "id": "self-critique",
+      "name": "Self-Critique (Async)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1650, 500]
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "core",
+      "id": "core-tag"
+    }
+  ]
+}

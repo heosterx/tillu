@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # TILLU Gateway
+  # ═══════════════════════════════════════════════════════════════
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - REDIS_URL=redis://redis:6379
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+    depends_on:
+      - redis
+      - searxng
+    volumes:
+      - ./app:/app/app
+      - ./daemon:/app/daemon
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # TILLU Daemon
+  # ═══════════════════════════════════════════════════════════════
+  daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m daemon.core
+    environment:
+      - APP_ENV=development
+      - LOG_LEVEL=INFO
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - REDIS_URL=redis://redis:6379
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    depends_on:
+      - redis
+    volumes:
+      - ./app:/app/app
+      - ./daemon:/app/daemon
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # Redis Cache
+  # ═══════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # SearXNG Search
+  # ═══════════════════════════════════════════════════════════════
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - BASE_URL=http://localhost:8080
+      - INSTANCE_NAME=tillu-search
+    volumes:
+      - ./deployments/searxng:/etc/searxng
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # n8n (Optional - for development)
+  # ═══════════════════════════════════════════════════════════════
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-password}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-changeme}
+      - WEBHOOK_URL=http://localhost:5678
+      - TILLU_GATEWAY_URL=http://gateway:8000
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  n8n_data:

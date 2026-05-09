@@ -1,0 +1,26 @@
+# TILLU Scraper - Playwright Service
+FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+
+# Install Node.js dependencies
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install express playwright
+
+# Copy scraper service code
+COPY scraper-service.js ./
+
+# Create non-root user
+USER pwuser
+
+# Expose port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+CMD ["node", "scraper-service.js"]

@@ -1,0 +1,203 @@
+{
+  "name": "WF-02: Morning Intelligence Brief",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hours": 7,
+              "minutes": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/get-users",
+        "method": "GET"
+      },
+      "id": "fetch-users",
+      "name": "Fetch Active Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Split users for parallel processing\nconst users = $input.first().json.users || [];\n\nreturn users.map(user => ({\n  json: user\n}));"
+      },
+      "id": "split-users",
+      "name": "Split Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "method": "GET",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "={{ $json.location?.lat || 40.7128 }}"
+            },
+            {
+              "name": "longitude",
+              "value": "={{ $json.location?.lon || -74.0060 }}"
+            },
+            {
+              "name": "current",
+              "value": "temperature_2m,weather_code"
+            },
+            {
+              "name": "daily",
+              "value": "temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+            },
+            {
+              "name": "timezone",
+              "value": "auto"
+            }
+          ]
+        }
+      },
+      "id": "fetch-weather",
+      "name": "Fetch Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 100]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/get-calendar",
+        "method": "GET",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            }
+          ]
+        }
+      },
+      "id": "fetch-calendar",
+      "name": "Fetch Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 250]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/get-tasks",
+        "method": "GET",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "name": "status",
+              "value": "active"
+            }
+          ]
+        }
+      },
+      "id": "fetch-tasks",
+      "name": "Fetch Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/get-news-cache",
+        "method": "GET",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "name": "since",
+              "value": "={{ new Date(Date.now() - 24*60*60*1000).toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "fetch-news",
+      "name": "Fetch News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 550]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Combine all data sources\nconst results = $input.all();\nconst user = results[0].json;\nconst weather = results[1]?.json;\nconst calendar = results[2]?.json || [];\nconst tasks = results[3]?.json || [];\nconst news = results[4]?.json || [];\n\n// Compile brief data\nconst briefData = {\n  user_id: user.user_id,\n  weather: {\n    current: weather?.current,\n    daily: weather?.daily\n  },\n  calendar: {\n    events_today: calendar.filter(e => {\n      const eventDate = new Date(e.start_time);\n      const today = new Date();\n      return eventDate.toDateString() === today.toDateString();\n    }),\n    events_count: calendar.length\n  },\n  tasks: {\n    pending: tasks.filter(t => !t.completed),\n    urgent: tasks.filter(t => {\n      if (!t.due_date) return false;\n      const daysUntil = (new Date(t.due_date) - new Date()) / (1000*60*60*24);\n      return daysUntil <= 2;\n    }),\n    total: tasks.length\n  },\n  news: {\n    headlines: news.slice(0, 5).map(n => n.title),\n    relevant: news.filter(n => n.relevance_score > 0.7),\n    breaking: news.filter(n => n.urgency_score >= 8)\n  }\n};\n\nreturn { json: briefData };"
+      },
+      "id": "compile-brief",
+      "name": "Compile Brief Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/synthesize-brief",
+        "method": "POST",
+        "body": "={{ $json }}"
+      },
+      "id": "synthesize",
+      "name": "Synthesize (Groq 70B)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Apply personality\nconst brief = $input.first().json;\nconst user = brief.user_data;\n\n// Get personality params\nconst params = user?.personality_params?.base || {};\n\nlet tone = 'balanced';\nif (params.warmth > 0.7) tone = 'warm';\nif (params.directness > 0.8) tone = 'concise';\n\nreturn {\n  json: {\n    ...brief,\n    personality_mode: tone,\n    tillu_message: brief.synthesized_text,\n    event_type: 'morning_brief'\n  }\n};"
+      },
+      "id": "apply-tone",
+      "name": "Apply Personality",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/publish-event",
+        "method": "POST",
+        "body": "={{ $json }}"
+      },
+      "id": "publish-event",
+      "name": "Publish to Redis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "intelligence",
+      "id": "intelligence-tag"
+    }
+  ]
+}
