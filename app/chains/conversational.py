@@ -177,7 +177,38 @@ Current time: {ist_ctx['current_datetime_full']}"""
         # Determine model based on complexity
         word_count = len(user_input.split())
         use_quality = word_count > 50 or "?" in user_input
-        
+
+        # ── Try Cloudflare AI Gateway first (gpt-5.5-pro) ────────────────────
+        if (settings.cf_api_token and settings.cf_account_id
+                and not settings.cf_account_id.startswith("YOUR_")):
+            try:
+                from app.providers.cloudflare_ai import CloudflareAI
+                cf_llm = CloudflareAI(model="openai/gpt-5.5-pro", max_tokens=1024, temperature=0.75)
+                system_prompt = self._build_personality_prompt(context)
+                cf_messages = [{"role": "system", "content": system_prompt}]
+                immediate_memory = context.get("immediate_memory", {}) if context else {}
+                for turn in immediate_memory.get("recent_turns", [])[-10:]:
+                    if turn.get("role") in ("user", "assistant"):
+                        cf_messages.append({"role": turn["role"], "content": turn.get("content", "")})
+                cf_messages.append({"role": "user", "content": user_input})
+                cf_response = await cf_llm.ainvoke(cf_messages)
+                latency_ms = int((time.time() - start_time) * 1000)
+                return {
+                    "response": {
+                        "type": "text",
+                        "content": apply_all_rules(cf_response.content),
+                        "structured_data": {},
+                    },
+                    "personality_mode": "sharp",
+                    "chain": self.chain_type.value,
+                    "model": "cf/openai/gpt-5.5-pro",
+                    "latency_ms": latency_ms,
+                    "tokens_used": 0,
+                    "sources": [],
+                }
+            except Exception as cf_err:
+                logger.warning(f"CF AI Gateway failed, falling back to Groq: {cf_err}")
+
         try:
             # Build personality-compiled system prompt
             system_prompt = self._build_personality_prompt(context)

@@ -66,28 +66,28 @@ def select_model(
         if avail["cerebras"]:
             return {"provider": "cerebras", "model": "llama-3.3-70b", "client": "cerebras"}
         if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "anthropic/claude-opus-4.6", "client": "cf"}
+            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
         if avail["groq"]:
             return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
 
     # ── Empathy / emotional support ───────────────────────────────────────────
     if task == "empathy":
         if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "anthropic/claude-opus-4.6", "client": "cf"}
+            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
         if avail["groq"]:
             return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
 
     # ── Creative / long-form ──────────────────────────────────────────────────
     if task in ("creative", "long_form"):
         if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "anthropic/claude-opus-4.6", "client": "cf"}
+            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
         if avail["groq"]:
             return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
 
     # ── Coding ────────────────────────────────────────────────────────────────
     if task == "coding":
         if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "anthropic/claude-opus-4.6", "client": "cf"}
+            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
         if avail["openrouter"]:
             return {"provider": "openrouter", "model": "deepseek/deepseek-coder-v2", "client": "openrouter"}
         if avail["groq"]:
