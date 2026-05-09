@@ -1,0 +1,70 @@
+{
+  "name": "WF-16: Personality Evolution — Weekly",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "weeks", "weekday": 0, "hours": 22, "minutes": 0 }] }
+      },
+      "id": "schedule-sunday",
+      "name": "Sunday 22:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/weekly-summary",
+        "method": "GET",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "weeks_back", "value": "1" }]
+        }
+      },
+      "id": "fetch-weekly-data",
+      "name": "Fetch Weekly Interaction Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/chains/personality-evolution",
+        "method": "POST",
+        "body": {
+          "weekly_data": "={{ $json }}",
+          "current_params": "={{ $json.current_personality }}"
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "run-evolution-chain",
+      "name": "Run Personality Evolution Chain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [600, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/memory/update-personality",
+        "method": "POST",
+        "body": {
+          "new_params": "={{ $json.evolved_params }}",
+          "evolution_notes": "={{ $json.notes }}",
+          "week": "={{ $json.week }}"
+        }
+      },
+      "id": "save-evolved-personality",
+      "name": "Save Evolved Personality",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [800, 400]
+    }
+  ],
+  "connections": {
+    "Sunday 22:00": { "main": [[{ "node": "Fetch Weekly Interaction Data", "type": "main", "index": 0 }]] },
+    "Fetch Weekly Interaction Data": { "main": [[{ "node": "Run Personality Evolution Chain", "type": "main", "index": 0 }]] },
+    "Run Personality Evolution Chain": { "main": [[{ "node": "Save Evolved Personality", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "personality", "id": "personality-tag" }, { "name": "memory", "id": "memory-tag" }]
+}
