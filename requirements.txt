@@ -28,8 +28,8 @@ supabase==2.5.0
 redis==5.2.0
 pgvector==0.3.0
 psycopg2-binary==2.9.10
-SQLAlchemy==2.1.0
-alembic==1.14.0
+SQLAlchemy==2.0.49
+alembic==1.13.1
 
 # Embeddings & NLP
 sentence-transformers==3.2.0
