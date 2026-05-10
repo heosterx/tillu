@@ -83,4 +83,8 @@ EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=3 \
     CMD curl -f http://localhost:7860/healthz || exit 1
 
-CMD ["n8n", "start"]
+# Startup: auto-creates owner account on first boot
+COPY startup.sh /startup.sh
+RUN chmod +x /startup.sh
+
+CMD ["/startup.sh"]

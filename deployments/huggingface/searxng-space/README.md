@@ -30,6 +30,15 @@ curl "https://tillu-ai-tillu-searxng.hf.space/search?q=AI+news&format=json&langu
 | `engines` | `google,bing,duckduckgo` | Comma-separated engines |
 | `pageno` | integer | Page number (default 1) |
 
+## Deployment
+
+1. Create new HuggingFace Space: `tillu-ai-tillu-searxng`
+2. SDK: Docker
+3. Copy files:
+   - `Dockerfile`
+   - `settings.yml`
+   - `README.md`
+
 ## Space Secrets
 
 None required — fully open meta-search.

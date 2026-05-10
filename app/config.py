@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     openweathermap_key: Optional[str] = Field(default=None, alias="OPENWEATHERMAP_KEY")
     
     # Services
-    searxng_url: str = Field(default="http://localhost:8080", alias="SEARXNG_URL")
+    searxng_url: str = Field(default="https://tillu-ai-tillu-searxng.hf.space", alias="SEARXNG_URL")
     websearch_url: str = Field(default="https://tillu-ai-tillu-websearch.hf.space", alias="WEBSEARCH_URL")
     playwright_service_url: str = Field(
         default="http://localhost:3001",

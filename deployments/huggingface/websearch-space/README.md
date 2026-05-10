@@ -6,45 +6,45 @@ colorTo: blue
 sdk: docker
 pinned: false
 license: mit
-short_description: Web search + scrape, Hindi/English
+short_description: JARVIS-grade search + scrape + intelligence
 ---
 
-# TILLU WebSearch Service
+# TILLU WebSearch v2
 
-Unified web search and scraping service for the TILLU AI system.
+JARVIS-grade unified web search, scraping, and AI intelligence service.
+
+## Search Chain (automatic fallback)
+
+1. **SearXNG** (primary) - meta-search: Google, Bing, DDG, Wikipedia, Reddit, GitHub, ArXiv
+2. **DuckDuckGo JSON** (fallback) - instant answers
+3. **DuckDuckGo HTML** (fallback) - full HTML scrape
+4. **Google Lite** (last resort)
 
 ## Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/health` | Liveness probe |
-| `GET` | `/status` | Service stats |
-| `POST` | `/search` | Web search (Brave → DuckDuckGo fallback) |
-| `POST` | `/scrape` | Scrape a URL with headless Chromium |
-| `POST` | `/search-and-scrape` | Search + scrape top results in one call |
+| GET | /health | Liveness probe |
+| GET | /status | Engine health + stats |
+| POST | /search | Web search with fallback chain |
+| POST | /scrape | Playwright headless scrape |
+| POST | /search-and-scrape | Search + scrape top-N |
+| POST | /intelligence | **JARVIS mode**: search + scrape + AI summary |
 
-## Usage
+## Deployment
 
-```bash
-# Search
-curl -X POST https://tillu-ai-tillu-websearch.hf.space/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Delhi weather today", "lang": "auto", "max_results": 5}'
-
-# Search + scrape
-curl -X POST https://tillu-ai-tillu-websearch.hf.space/search-and-scrape \
-  -H "Content-Type: application/json" \
-  -d '{"query": "latest news India", "lang": "hi", "scrape_top": 3}'
-```
+1. Create new HuggingFace Space: `tillu-ai-tillu-websearch`
+2. SDK: Docker
+3. Copy files:
+   - `Dockerfile`
+   - `main.py`
+   - `requirements.txt`
+   - `README.md`
+4. Configure Space Secrets:
 
 ## Space Secrets
 
 | Secret | Required | Description |
 |--------|----------|-------------|
-| `BRAVE_API_KEY` | Optional | Brave Search API key — falls back to DuckDuckGo without it |
-
-## Language Support
-
-- Auto-detects Hindi vs English from Devanagari Unicode
-- Hindi queries use `hl=hi&gl=in` locale params
-- Cross-lingual search supported
+| SEARXNG_URL | Recommended | `https://tillu-ai-tillu-searxng.hf.space` |
+| GROQ_API_KEY | Optional | Enables AI summarisation in /intelligence |

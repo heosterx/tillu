@@ -260,42 +260,26 @@ Be concise and specific."""
         scraped = []
         
         # Scrape top results (limit to avoid timeouts)
-        for result in state["search_results"][:8]:
-            try:
-                url = result.get("url")
-                if not url:
-                    continue
-                
-                # For now, use the snippet as content
-                # In production, use Playwright to render
-                content = result.get("snippet", "")
-                
-                # Summarize if content is long
-                if len(content) > 300:
-                    summary = await self.summarizer.summarize(
-                        content,
-                        max_length=200,
-                        min_length=50
-                    )
-                else:
-                    summary = content
-                
-                scraped.append({
-                    "url": url,
-                    "title": result.get("title"),
-                    "summary": summary,
-                    "source": result.get("source"),
-                    "angle": result.get("angle"),
-                    "word_count": len(summary.split())
-                })
-                
-            except Exception as e:
-                self.logger.error(f"Scrape error for {result.get('url')}: {e}")
-        
-        state["scraped_content"] = scraped
-        state["status"] = "scrape_complete"
-        
-        self.logger.info(f"Scraped {len(scraped)} pages")
+        from app.tools.search_tools import ScrapePageTool
+        import asyncio as _asyncio
+        scraper = ScrapePageTool()
+        tasks = [scraper.execute(r["url"]) for r in state["search_results"][:6] if r.get("url")]
+        results = await _asyncio.gather(*tasks, return_exceptions=True)
+        for r, res in zip(state["search_results"][:6], results):
+            if isinstance(res, dict) and res.get("success"):
+                text = res.get("text", "")[:2000]
+                summary = text if len(text) < 300 else text[:500]
+            else:
+                summary = r.get("snippet", "")
+            scraped.append({
+                "url": r.get("url"),
+                "title": r.get("title"),
+                "summary": summary,
+                "source": r.get("source"),
+                "angle": r.get("angle"),
+                "word_count": len(summary.split()),
+            })
+        self.logger.info("Scraped %d pages via WebSearch service" % len(scraped))
         return state
     
     async def _extract_node(self, state: ResearchState) -> ResearchState:
