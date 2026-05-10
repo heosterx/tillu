@@ -208,13 +208,22 @@ class DaemonProcess:
         """
         LOOP 1: HEARTBEAT (60s interval)
         → Publish presence to Redis tillu:system:health
+        → Write heartbeat file for Fly.io health check
         → Confirm all other loops are alive
-        → Self-restart any dead loop
         """
+        import os
+        # Write heartbeat file for Fly.io health check
+        try:
+            with open("/tmp/daemon_heartbeat", "w") as f:
+                f.write(datetime.now().isoformat())
+        except Exception:
+            pass
+
         await cache.publish("tillu:system:health", {
             "agent": "daemon",
             "timestamp": datetime.now().isoformat(),
-            "status": "healthy"
+            "status": "healthy",
+            "active_loops": len([t for t in self.tasks if not t.done()]),
         })
     
     async def _loop_financial_watcher(self):
