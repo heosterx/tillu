@@ -15,6 +15,15 @@ from langdetect import detect, LangDetectException
 from playwright.async_api import async_playwright, Browser, BrowserContext
 from pydantic import BaseModel, Field, field_validator
 from readability import Document
+
+# Crawl4AI for AI-optimized scraping
+try:
+    from crawl4ai import AsyncWebCrawler
+    from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
+    CRAWL4AI_AVAILABLE = True
+except ImportError:
+    CRAWL4AI_AVAILABLE = False
+    logger.warning("Crawl4AI not available, using fallback scrapers")
 from tenacity import (
     retry, retry_if_exception_type,
     stop_after_attempt, wait_exponential, before_sleep_log,
@@ -674,7 +683,52 @@ async def do_search(
     return [], 'none'
 
 # ---------------------------------------------------------------------------
-# Playwright scraper
+# Crawl4AI scraper (Primary - AI-optimized)
+# ---------------------------------------------------------------------------
+async def scrape_with_crawl4ai(url: str) -> ScrapeResponse:
+    """Scrape using Crawl4AI - optimized for AI/LLM applications"""
+    if not CRAWL4AI_AVAILABLE:
+        raise RuntimeError("Crawl4AI not available")
+    
+    try:
+        # Configure browser for lightweight scraping
+        browser_config = BrowserConfig(
+            headless=True,
+            text_mode=True,  # Skip images for speed
+            light_mode=True,  # Reduce memory usage
+        )
+        
+        run_config = CrawlerRunConfig(
+            word_count_threshold=10,  # Filter out short fragments
+            remove_overlay_elements=True,  # Remove popups/modals
+            excluded_tags=['script', 'style', 'nav', 'footer', 'header'],
+        )
+        
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            result = await crawler.arun(url=url, config=run_config)
+            
+            return ScrapeResponse(
+                url=str(result.url),
+                title=result.metadata.get('title', ''),
+                content=result.markdown or result.cleaned_text or result.text,
+                html=None,  # Crawl4AI returns markdown by default
+                text=result.cleaned_text or result.text,
+                status=200,
+                scrape_method='crawl4ai',
+                links=[],
+                metadata={
+                    'crawl4ai_success': result.success,
+                    'links_found': len(result.links.get('internal', [])) + len(result.links.get('external', [])),
+                    'images_found': len(result.media.get('images', [])),
+                }
+            )
+    except Exception as e:
+        logger.error(f"Crawl4AI scrape failed for {url}: {e}")
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Playwright scraper (Fallback)
 # ---------------------------------------------------------------------------
 async def scrape_url(url: str, extract_text: bool = True) -> ScrapeResponse:
     browser = await get_browser()
@@ -867,8 +921,18 @@ async def search(req: SearchRequest):
 
 @app.post('/scrape', response_model=ScrapeResponse, response_class=ORJSONResponse)
 async def scrape(req: ScrapeRequest):
+    """Scrape endpoint with Crawl4AI as primary, Playwright as fallback"""
     stats.scrapes_total += 1
     logger.info('Scrape: %s', req.url)
+    
+    # Try Crawl4AI first (AI-optimized, lighter than Playwright)
+    if CRAWL4AI_AVAILABLE:
+        try:
+            return await scrape_with_crawl4ai(req.url)
+        except Exception as e:
+            logger.warning(f"Crawl4AI failed, falling back to Playwright: {e}")
+    
+    # Fallback to Playwright
     return await scrape_url(req.url, req.extract_text)
 
 @app.post('/search-and-scrape', response_model=SearchAndScrapeResponse, response_class=ORJSONResponse)

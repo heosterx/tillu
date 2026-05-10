@@ -1,0 +1,60 @@
+{
+  "name": "WF-CUSTOM: User-Defined Workflow Template",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "custom-trigger",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "custom-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// ── TILLU Custom Workflow ──────────────────────────────────────\n// This template can be customized by the user or by TILLU itself.\n// Modify the logic below to create any automation.\n\nconst input = $input.first().json;\nconst userId = input.user_id || 'default';\nconst action = input.action || 'unknown';\nconst data = input.data || {};\n\n// Log the trigger\nconsole.log(`Custom workflow triggered: action=${action} user=${userId}`);\n\n// Add your custom logic here:\n// - Call external APIs\n// - Process data\n// - Send notifications\n// - Update Supabase\n\nreturn {\n  json: {\n    user_id: userId,\n    action: action,\n    data: data,\n    processed_at: new Date().toISOString(),\n    status: 'processed'\n  }\n};"
+      },
+      "id": "custom-logic",
+      "name": "Custom Logic",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/publish-event",
+        "method": "POST",
+        "body": {
+          "event_type": "custom_workflow_result",
+          "priority": "normal",
+          "data": "={{ $json }}"
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "publish-result",
+      "name": "Publish Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Custom Logic", "type": "main", "index": 0 }]] },
+    "Custom Logic": { "main": [[{ "node": "Publish Result", "type": "main", "index": 0 }, { "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "custom", "id": "custom-tag" }]
+}

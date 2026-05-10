@@ -9,3 +9,6 @@ python-dotenv==1.0.0
 tenacity==8.2.3
 orjson==3.9.12
 langdetect==1.0.9
+
+# AI-Optimized Web Scraping
+crawl4ai>=0.4.0

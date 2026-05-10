@@ -27,9 +27,21 @@ JARVIS-grade unified web search, scraping, and AI intelligence service.
 | GET | /health | Liveness probe |
 | GET | /status | Engine health + stats |
 | POST | /search | Web search with fallback chain |
-| POST | /scrape | Playwright headless scrape |
+| POST | /scrape | **Crawl4AI** + Playwright fallback |
 | POST | /search-and-scrape | Search + scrape top-N |
 | POST | /intelligence | **JARVIS mode**: search + scrape + AI summary |
+
+## Scraper Chain
+
+1. **Crawl4AI** (primary) - AI-optimized, lightweight, markdown extraction
+2. **Playwright** (fallback) - Full browser automation for complex pages
+
+Crawl4AI provides:
+- AI-optimized content extraction
+- Automatic cleaning (removes ads, nav, footer)
+- Markdown output perfect for LLMs
+- JavaScript rendering without heavy Chrome overhead
+- Better container/HF Space compatibility
 
 ## Deployment
 
