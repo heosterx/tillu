@@ -1,0 +1,114 @@
+# SearXNG settings for TILLU WebSearch HF Space
+# Minimal config — privacy-first, no tracking
+
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "TILLU Search"
+  privacypolicy_url: false
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  ban_time_on_fail: 5
+  max_ban_time_on_fail: 120
+  formats:
+    - html
+    - json
+
+server:
+  port: 8888
+  bind_address: "127.0.0.1"
+  secret_key: "tillu-searxng-internal-secret-key-change-in-prod"
+  base_url: false
+  image_proxy: false
+  http_protocol_version: "1.0"
+  method: "POST"
+  default_http_headers:
+    X-Content-Type-Options: nosniff
+    X-Download-Options: noopen
+    X-Robots-Tag: noindex, nofollow
+    Referrer-Policy: no-referrer
+
+redis:
+  url: false
+
+ui:
+  static_use_hash: false
+  default_locale: ""
+  query_in_title: false
+  infinite_scroll: false
+  center_alignment: false
+  default_theme: simple
+  theme_args:
+    simple_style: auto
+
+# Outgoing HTTP settings
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 15.0
+  useragent_suffix: ""
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    use_mobile_ui: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: w
+    base_url: "https://{language}.wikipedia.org/"
+
+  - name: google news
+    engine: google_news
+    shortcut: gn
+
+  - name: bing news
+    engine: bing_news
+    shortcut: bn
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: ax
+    categories: science
+
+  - name: github
+    engine: github
+    shortcut: gh
+
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: so
+
+  - name: reddit
+    engine: reddit
+    shortcut: re
+    page_size: 5
+
+categories_as_tabs:
+  general:
+    - general
+  news:
+    - news
+  science:
+    - science
+  it:
+    - it
+    - repos

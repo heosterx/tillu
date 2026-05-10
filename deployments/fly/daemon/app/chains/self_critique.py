@@ -8,7 +8,7 @@ Output: Quality scores stored to interactions table
 from typing import Any, Dict, Optional
 import time
 from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage
+from langchain.schema import HumanMessage
 
 from app.config import settings
 from app.chains.base import BaseChain, ChainType

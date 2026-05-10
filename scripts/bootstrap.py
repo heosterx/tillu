@@ -1,0 +1,3 @@
+import pathlib,base64
+OUT=pathlib.Path(chr(100)+chr(58)+chr(47)+chr(84)+chr(73)+chr(76)+chr(76)+chr(85)+chr(47)+chr(116)+chr(105)+chr(108)+chr(108)+chr(117)+chr(45)+chr(98)+chr(97)+chr(99)+chr(107)+chr(101)+chr(110)+chr(100)+chr(47)+chr(100)+chr(101)+chr(112)+chr(108)+chr(111)+chr(121)+chr(109)+chr(101)+chr(110)+chr(116)+chr(115)+chr(47)+chr(104)+chr(117)+chr(103)+chr(103)+chr(105)+chr(110)+chr(103)+chr(102)+chr(97)+chr(99)+chr(101)+chr(47)+chr(119)+chr(101)+chr(98)+chr(115)+chr(101)+chr(97)+chr(114)+chr(99)+chr(104)+chr(45)+chr(115)+chr(112)+chr(97)+chr(99)+chr(101)+chr(47)+chr(109)+chr(97)+chr(105)+chr(110)+chr(46)+chr(112)+chr(121))
+lines=[]

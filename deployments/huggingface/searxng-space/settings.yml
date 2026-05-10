@@ -1,0 +1,122 @@
+# SearXNG configuration for TILLU AI
+# Deployed as HuggingFace Space (Docker)
+# JSON API enabled — used by tillu-websearch service
+
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "TILLU Search"
+  privacypolicy_url: false
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  ban_time_on_fail: 5
+  max_ban_time_on_fail: 120
+  # CRITICAL: json format must be listed here for API access
+  formats:
+    - html
+    - json
+
+server:
+  # HF Spaces requires port 7860
+  port: 7860
+  bind_address: "0.0.0.0"
+  secret_key: "tillu-searxng-hf-space-secret-2025"
+  base_url: false
+  image_proxy: false
+  http_protocol_version: "1.0"
+  method: "POST"
+  default_http_headers:
+    X-Content-Type-Options: nosniff
+    X-Robots-Tag: noindex, nofollow
+    Referrer-Policy: no-referrer
+
+redis:
+  url: false
+
+ui:
+  static_use_hash: false
+  default_locale: ""
+  query_in_title: false
+  infinite_scroll: false
+  center_alignment: false
+  default_theme: simple
+  theme_args:
+    simple_style: auto
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 20.0
+  useragent_suffix: ""
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    use_mobile_ui: false
+    weight: 2
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    weight: 1
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    weight: 1
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: w
+    base_url: "https://{language}.wikipedia.org/"
+    weight: 1
+
+  - name: google news
+    engine: google_news
+    shortcut: gn
+    categories: news
+
+  - name: bing news
+    engine: bing_news
+    shortcut: bn
+    categories: news
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: ax
+    categories: science
+
+  - name: github
+    engine: github
+    shortcut: gh
+    categories: it
+
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: so
+    categories: it
+
+  - name: reddit
+    engine: reddit
+    shortcut: re
+    page_size: 5
+
+categories_as_tabs:
+  general:
+    - general
+  news:
+    - news
+  science:
+    - science
+  it:
+    - it

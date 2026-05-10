@@ -9,14 +9,15 @@ Output: Natural language + personality applied
 from typing import Any, Dict, Optional
 import time
 from langchain_groq import ChatGroq
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain.memory import ConversationBufferWindowMemory
+from langchain.chains import ConversationChain
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
 
 from app.config import settings
 from app.utils.logging import get_logger
 from app.chains.base import BaseChain, ChainType
-from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_context
-
-logger = get_logger("conversational_chain")
+from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_contextlogger = get_logger("conversational_chain")
 
 
 class ConversationalChain(BaseChain):

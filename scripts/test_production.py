@@ -25,6 +25,11 @@ TESTS = [
         "expect": 200,
     },
     {
+        "name": "HF Space — tillu-daemon",
+        "url": "https://tillu-ai-tillu-daemon.hf.space/health",
+        "expect": 200,
+    },
+    {
         "name": "HF Space — tillu-websearch",
         "url": "https://tillu-ai-tillu-websearch.hf.space/health",
         "expect": 200,

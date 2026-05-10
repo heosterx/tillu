@@ -9,20 +9,11 @@ primary_region = "bom"  # Mumbai — closest to NCR/Delhi
 [build]
   dockerfile = "Dockerfile"
 
-# Worker process — no HTTP service needed
-[processes]
-  daemon = "python -m daemon.core"
-
 # Machine config — smallest free tier
 [[vm]]
   size = "shared-cpu-1x"
   memory = "256mb"
   cpus = 1
-
-# Auto-restart on crash
-[restart]
-  policy = "always"
-  max_retries = 10
 
 # Environment variables (non-secret)
 [env]
@@ -41,11 +32,6 @@ primary_region = "bom"  # Mumbai — closest to NCR/Delhi
 #   GROQ_API_KEY
 #   HF_TOKEN
 #   SECRET_KEY
+#   SUPABASE_JWT_SECRET
 
 # No HTTP service — daemon is a pure background worker
-# Uncomment below ONLY if you add a health HTTP endpoint to daemon
-# [[services]]
-#   internal_port = 8001
-#   protocol = "tcp"
-#   [[services.ports]]
-#     port = 8001

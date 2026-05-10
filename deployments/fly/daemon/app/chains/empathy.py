@@ -9,7 +9,7 @@ Output: Emotionally calibrated response
 from typing import Any, Dict, Optional
 import time
 from langchain_groq import ChatGroq
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
 
 from app.config import settings
 from app.chains.base import BaseChain, ChainType
