@@ -1,22 +1,11 @@
 """
-LangChain Chain Registry
-LangChain is not a tool Tillu uses. LangChain IS how Tillu thinks.
+LangChain Chain Registry — lazy imports to avoid loading all providers at startup.
 """
 from .base import ChainRegistry, BaseChain, ChainType
-from .conversational import ConversationalChain
-from .research import ResearchChain
-from .react_agent import ReActAgentChain
-from .analysis import AnalysisChain
-from .context_assembler import ContextAssembler
-from .empathy import EmpathyChain
-from .self_critique import SelfCritiqueChain
-from .memory_consolidation import MemoryConsolidationChain
-from .personality_evolution import PersonalityEvolutionChain
-from .ambient_monitoring import AmbientMonitoringChain
 
 __all__ = [
     "ChainRegistry",
-    "BaseChain",
+    "BaseChain", 
     "ChainType",
     "ConversationalChain",
     "ResearchChain",
@@ -29,3 +18,37 @@ __all__ = [
     "PersonalityEvolutionChain",
     "AmbientMonitoringChain",
 ]
+
+
+def __getattr__(name: str):
+    if name == "ConversationalChain":
+        from .conversational import ConversationalChain
+        return ConversationalChain
+    if name == "ResearchChain":
+        from .research import ResearchChain
+        return ResearchChain
+    if name == "ReActAgentChain":
+        from .react_agent import ReActAgentChain
+        return ReActAgentChain
+    if name == "AnalysisChain":
+        from .analysis import AnalysisChain
+        return AnalysisChain
+    if name == "ContextAssembler":
+        from .context_assembler import ContextAssembler
+        return ContextAssembler
+    if name == "EmpathyChain":
+        from .empathy import EmpathyChain
+        return EmpathyChain
+    if name == "SelfCritiqueChain":
+        from .self_critique import SelfCritiqueChain
+        return SelfCritiqueChain
+    if name == "MemoryConsolidationChain":
+        from .memory_consolidation import MemoryConsolidationChain
+        return MemoryConsolidationChain
+    if name == "PersonalityEvolutionChain":
+        from .personality_evolution import PersonalityEvolutionChain
+        return PersonalityEvolutionChain
+    if name == "AmbientMonitoringChain":
+        from .ambient_monitoring import AmbientMonitoringChain
+        return AmbientMonitoringChain
+    raise AttributeError(f"module 'app.chains' has no attribute {name!r}")

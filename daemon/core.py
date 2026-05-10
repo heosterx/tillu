@@ -1,5 +1,5 @@
 """
-Daemon Process - 11 Concurrent Async Loops
+Daemon Process - 16 Concurrent Async Loops
 Always-watching ambient intelligence. Never stops.
 """
 import asyncio
@@ -12,15 +12,10 @@ from app.config import settings
 from app.utils.logging import get_logger, configure_logging
 from app.utils.database import db
 from app.utils.cache import cache
-from app.transformers.classifiers import emotion_detector, stress_detector
-from app.services.news_service import news_service
-from app.services.financial_service import financial_service
-from app.services.web_monitor_service import web_monitor_service
-from app.services.email_service import email_service
-from app.services.calendar_service import calendar_service
-from app.chains.memory_consolidation import MemoryConsolidationChain
-from app.chains.personality_evolution import PersonalityEvolutionChain
-from app.chains.ambient_monitoring import AmbientMonitoringChain
+
+# ── Lazy imports — loaded only when the loop actually runs ────────────────────
+# This prevents missing optional packages (langchain_cerebras, etc.)
+# from crashing the entire daemon at startup.
 
 logger = get_logger("daemon")
 
@@ -237,6 +232,7 @@ class DaemonProcess:
         
         try:
             # Use Phase 5 financial service to update prices
+            from app.services.financial_service import financial_service
             updated = await financial_service.update_all_prices()
             
             # Check for alerts and publish events
@@ -288,6 +284,7 @@ class DaemonProcess:
         self.logger.info("Running web change detector...")
         
         try:
+            from app.services.web_monitor_service import web_monitor_service
             # Use Phase 5 web monitor service
             changes = await web_monitor_service.check_all_monitors()
             
@@ -318,6 +315,7 @@ class DaemonProcess:
         self.logger.info("Running news urgency scanner...")
         
         try:
+            from app.services.news_service import news_service
             # Use Phase 5 news service to fetch fresh news
             # Fetch from RSS and NewsAPI
             articles = await news_service.fetch_all()
@@ -730,6 +728,7 @@ class DaemonProcess:
                 user_id = user.get("id")
                 
                 # Use Phase 5 email service to fetch and analyze
+                from app.services.email_service import email_service
                 emails = await email_service.fetch_and_analyze(user_id, max_emails=5, since_hours=1)
                 
                 # Publish events for high-importance emails
@@ -777,6 +776,7 @@ class DaemonProcess:
                 user_id = user.get("id")
                 
                 # Use Phase 5 calendar service to sync events
+                from app.services.calendar_service import calendar_service
                 events = await calendar_service.sync_events(user_id, days_ahead=7)
                 
                 # Get today's summary
@@ -838,6 +838,7 @@ class DaemonProcess:
                 user_id = user.get("id")
                 
                 # Use Phase 6 MemoryConsolidationChain
+                from app.chains.memory_consolidation import MemoryConsolidationChain
                 chain = MemoryConsolidationChain()
                 result = await chain.execute({"user_id": user_id})
                 
@@ -863,6 +864,7 @@ class DaemonProcess:
                 user_id = user.get("id")
                 
                 # Use Phase 6 PersonalityEvolutionChain
+                from app.chains.personality_evolution import PersonalityEvolutionChain
                 chain = PersonalityEvolutionChain()
                 result = await chain.execute({"user_id": user_id})
                 
@@ -884,6 +886,7 @@ class DaemonProcess:
         
         try:
             # Use Phase 6 AmbientMonitoringChain
+            from app.chains.ambient_monitoring import AmbientMonitoringChain
             chain = AmbientMonitoringChain()
             result = await chain.execute({})
             
