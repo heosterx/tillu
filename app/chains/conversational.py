@@ -17,7 +17,9 @@ from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from app.config import settings
 from app.utils.logging import get_logger
 from app.chains.base import BaseChain, ChainType
-from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_contextlogger = get_logger("conversational_chain")
+from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_context
+
+logger = get_logger("conversational_chain")
 
 
 class ConversationalChain(BaseChain):
