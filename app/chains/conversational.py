@@ -178,13 +178,23 @@ Current time: {ist_ctx['current_datetime_full']}"""
         word_count = len(user_input.split())
         use_quality = word_count > 50 or "?" in user_input
 
-        # ── Try Cloudflare AI Gateway first (gpt-5.5-pro) ────────────────────
-        if (settings.cf_api_token and settings.cf_account_id
+        # ── Try Cloudflare AI Gateway first ──────────────────────────────────
+        if (settings.cf_account_id
                 and not settings.cf_account_id.startswith("YOUR_")):
             try:
+                from app.providers.llm_router import available_providers
                 from app.providers.cloudflare_ai import CloudflareAI
-                cf_llm = CloudflareAI(model="openai/gpt-5.5-pro", max_tokens=1024, temperature=0.75)
-                system_prompt = self._build_personality_prompt(context)
+                avail = available_providers()
+                # Pick best CF model available
+                if avail.get("cf_openai"):
+                    cf_model = "openai/gpt-5.5-pro"
+                elif avail.get("cf_anthropic"):
+                    cf_model = "anthropic/claude-opus-4.6"
+                elif avail.get("cf_workers"):
+                    cf_model = "@cf/meta/llama-3.1-8b-instruct"
+                else:
+                    raise ValueError("No CF model available")
+                cf_llm = CloudflareAI(model=cf_model, max_tokens=1024, temperature=0.75)                system_prompt = self._build_personality_prompt(context)
                 cf_messages = [{"role": "system", "content": system_prompt}]
                 immediate_memory = context.get("immediate_memory", {}) if context else {}
                 for turn in immediate_memory.get("recent_turns", [])[-10:]:

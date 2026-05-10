@@ -1,18 +1,22 @@
 """
 TILLU LLM Router
 =================
-Selects the best available LLM provider based on:
-  - Task type (speed vs depth vs creativity)
-  - Provider availability (API key configured)
-  - Priority order per task
+Selects the best available LLM provider based on task type and availability.
 
-Provider priority:
-  quick_chat      → Groq 8B → CF Llama → Cerebras
-  deep_reasoning  → Cerebras 70B → CF Claude → Groq 70B
-  creative        → CF Claude → Groq 70B → OpenRouter
-  empathy         → CF Claude → Groq 70B
-  coding          → CF Claude → OpenRouter DeepSeek → Groq 70B
-  analysis        → Cerebras → CF Claude → Groq 70B
+Provider priority per task:
+
+  quick_chat      → Groq 8B → CF Workers AI (free) → Google Gemini
+  deep_reasoning  → Cerebras 70B → CF Claude (if key set) → CF GPT (if key set) → Groq 70B
+  empathy         → CF Claude → CF GPT → Groq 70B → CF Workers AI
+  creative        → CF Claude → CF GPT → Groq 70B
+  coding          → CF GPT → CF Claude → OpenRouter DeepSeek → Groq 70B
+  analysis        → Cerebras → CF Claude → CF GPT → Groq 70B
+
+CF Workers AI (@cf/meta/llama-3.1-8b-instruct) is always available as a free fallback
+as long as CF_ACCOUNT_ID and CF_TOKEN_GPT or CF_TOKEN_CLAUDE are set.
+
+CF OpenAI/Anthropic gateway calls require the actual provider API key
+(OPENAI_API_KEY / ANTHROPIC_API_KEY) in addition to the CF gateway token.
 """
 
 from __future__ import annotations
@@ -24,95 +28,91 @@ from app.utils.logging import get_logger
 
 logger = get_logger("llm_router")
 
-# ── Provider availability check ───────────────────────────────────────────────
 
 def _has(key: str) -> bool:
     val = os.environ.get(key, "")
-    return bool(val and not val.startswith("YOUR_"))
+    return bool(val and not val.startswith("YOUR_") and not val.startswith("sk-YOUR"))
 
 
 def available_providers() -> dict[str, bool]:
+    cf_base = _has("CF_ACCOUNT_ID")
+    cf_token = _has("CF_TOKEN_GPT") or _has("CF_TOKEN_CLAUDE")
     return {
-        "groq":       _has("GROQ_API_KEY"),
-        "cerebras":   _has("CEREBRAS_API_KEY"),
-        "cloudflare": _has("CF_API_TOKEN") and _has("CF_ACCOUNT_ID"),
-        "openrouter": _has("OPENROUTER_API_KEY"),
-        "google":     _has("GOOGLE_API_KEY"),
-        "openai":     _has("OPENAI_API_KEY"),
-        "anthropic":  _has("ANTHROPIC_API_KEY"),
+        "groq":           _has("GROQ_API_KEY"),
+        "cerebras":       _has("CEREBRAS_API_KEY"),
+        "cf_workers":     cf_base and cf_token,                          # free, always
+        "cf_openai":      cf_base and _has("OPENAI_API_KEY"),            # needs OpenAI key
+        "cf_anthropic":   cf_base and _has("ANTHROPIC_API_KEY"),         # needs Anthropic key
+        "openrouter":     _has("OPENROUTER_API_KEY"),
+        "google":         _has("GOOGLE_API_KEY"),
     }
 
 
-# ── Model selection ───────────────────────────────────────────────────────────
-
-def select_model(
-    task: str = "quick_chat",
-    word_count: int = 0,
-) -> dict[str, Any]:
+def select_model(task: str = "quick_chat", word_count: int = 0) -> dict[str, Any]:
     """
-    Select the best model + provider for a given task.
-
-    Returns:
-        {
-            "provider": "groq" | "cerebras" | "cloudflare" | ...,
-            "model":    model identifier string,
-            "client":   "groq" | "cf" | "cerebras" | "openrouter",
-        }
+    Select best model + provider for a task.
+    Returns {"provider", "model", "client"}.
     """
-    avail = available_providers()
+    a = available_providers()
 
     # ── Deep reasoning / analysis ─────────────────────────────────────────────
     if task in ("deep_reasoning", "analysis", "research"):
-        if avail["cerebras"]:
-            return {"provider": "cerebras", "model": "llama-3.3-70b", "client": "cerebras"}
-        if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
-        if avail["groq"]:
-            return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
+        if a["cerebras"]:
+            return {"provider": "cerebras",     "model": "llama-3.3-70b",                    "client": "cerebras"}
+        if a["cf_anthropic"]:
+            return {"provider": "cf_anthropic", "model": "anthropic/claude-opus-4.6",         "client": "cf"}
+        if a["cf_openai"]:
+            return {"provider": "cf_openai",    "model": "openai/gpt-5.5-pro",                "client": "cf"}
+        if a["groq"]:
+            return {"provider": "groq",         "model": "llama-3.1-70b-versatile",           "client": "groq"}
 
     # ── Empathy / emotional support ───────────────────────────────────────────
     if task == "empathy":
-        if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
-        if avail["groq"]:
-            return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
+        if a["cf_anthropic"]:
+            return {"provider": "cf_anthropic", "model": "anthropic/claude-opus-4.6",         "client": "cf"}
+        if a["cf_openai"]:
+            return {"provider": "cf_openai",    "model": "openai/gpt-5.5-pro",                "client": "cf"}
+        if a["groq"]:
+            return {"provider": "groq",         "model": "llama-3.1-70b-versatile",           "client": "groq"}
+        if a["cf_workers"]:
+            return {"provider": "cf_workers",   "model": "@cf/meta/llama-3.1-8b-instruct",    "client": "cf"}
 
     # ── Creative / long-form ──────────────────────────────────────────────────
     if task in ("creative", "long_form"):
-        if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
-        if avail["groq"]:
-            return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
+        if a["cf_anthropic"]:
+            return {"provider": "cf_anthropic", "model": "anthropic/claude-opus-4.6",         "client": "cf"}
+        if a["cf_openai"]:
+            return {"provider": "cf_openai",    "model": "openai/gpt-5.5-pro",                "client": "cf"}
+        if a["groq"]:
+            return {"provider": "groq",         "model": "llama-3.1-70b-versatile",           "client": "groq"}
 
     # ── Coding ────────────────────────────────────────────────────────────────
     if task == "coding":
-        if avail["cloudflare"]:
-            return {"provider": "cloudflare", "model": "openai/gpt-5.5-pro", "client": "cf"}
-        if avail["openrouter"]:
-            return {"provider": "openrouter", "model": "deepseek/deepseek-coder-v2", "client": "openrouter"}
-        if avail["groq"]:
-            return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
+        if a["cf_openai"]:
+            return {"provider": "cf_openai",    "model": "openai/gpt-5.5-pro",                "client": "cf"}
+        if a["cf_anthropic"]:
+            return {"provider": "cf_anthropic", "model": "anthropic/claude-opus-4.6",         "client": "cf"}
+        if a["openrouter"]:
+            return {"provider": "openrouter",   "model": "deepseek/deepseek-coder-v2",        "client": "openrouter"}
+        if a["groq"]:
+            return {"provider": "groq",         "model": "llama-3.1-70b-versatile",           "client": "groq"}
 
     # ── Quick chat (default) ──────────────────────────────────────────────────
-    # Use quality model for longer inputs
-    if word_count > 50 and avail["groq"]:
-        return {"provider": "groq", "model": "llama-3.1-70b-versatile", "client": "groq"}
+    if word_count > 50 and a["groq"]:
+        return {"provider": "groq",         "model": "llama-3.1-70b-versatile",               "client": "groq"}
+    if a["groq"]:
+        return {"provider": "groq",         "model": "llama-3.1-8b-instant",                  "client": "groq"}
 
-    if avail["groq"]:
-        return {"provider": "groq", "model": "llama-3.1-8b-instant", "client": "groq"}
-
-    # ── Fallbacks ─────────────────────────────────────────────────────────────
-    if avail["cloudflare"]:
-        return {
-            "provider": "cloudflare",
-            "model": "@cf/meta/llama-3.1-8b-instruct",
-            "client": "cf",
-        }
-    if avail["google"]:
-        return {"provider": "google", "model": "gemini-1.5-flash", "client": "google"}
+    # ── Free fallbacks ────────────────────────────────────────────────────────
+    if a["cf_workers"]:
+        return {"provider": "cf_workers",   "model": "@cf/meta/llama-3.1-8b-instruct",        "client": "cf"}
+    if a["google"]:
+        return {"provider": "google",       "model": "gemini-1.5-flash",                      "client": "google"}
 
     raise RuntimeError(
-        "No LLM provider configured. Set at least GROQ_API_KEY or CF_API_TOKEN+CF_ACCOUNT_ID."
+        "No LLM provider configured.\n"
+        "Set GROQ_API_KEY (free at console.groq.com) or\n"
+        "CF_ACCOUNT_ID + CF_TOKEN_GPT for Workers AI (free)."
     )
 
 
@@ -123,20 +123,15 @@ async def invoke(
     max_tokens: int = 1024,
     temperature: float = 0.75,
 ) -> dict[str, Any]:
-    """
-    Route and invoke the best available LLM.
+    """Route and invoke the best available LLM for the given task."""
+    sel      = select_model(task, word_count)
+    provider = sel["provider"]
+    model    = sel["model"]
+    client   = sel["client"]
 
-    Returns:
-        {"content": str, "model": str, "provider": str}
-    """
-    selection = select_model(task, word_count)
-    provider  = selection["provider"]
-    model     = selection["model"]
-    client    = selection["client"]
+    logger.info("LLM route: task=%s → %s / %s", task, provider, model)
 
-    logger.info("LLM route: task=%s → provider=%s model=%s", task, provider, model)
-
-    # ── Cloudflare ────────────────────────────────────────────────────────────
+    # ── Cloudflare (Workers AI, OpenAI gateway, Anthropic gateway) ────────────
     if client == "cf":
         from app.providers.cloudflare_ai import run as cf_run
         result = await cf_run(model=model, messages=messages, max_tokens=max_tokens)
@@ -146,31 +141,27 @@ async def invoke(
     if client == "groq":
         from langchain_groq import ChatGroq
         from langchain.schema import HumanMessage, SystemMessage, AIMessage
-        import os
-
         llm = ChatGroq(
             api_key=os.environ["GROQ_API_KEY"],
             model_name=model,
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        lc_messages = []
+        lc_msgs = []
         for m in messages:
-            role = m.get("role", "user")
-            content = m.get("content", "")
+            role, content = m.get("role", "user"), m.get("content", "")
             if role == "system":
-                lc_messages.append(SystemMessage(content=content))
+                lc_msgs.append(SystemMessage(content=content))
             elif role == "assistant":
-                lc_messages.append(AIMessage(content=content))
+                lc_msgs.append(AIMessage(content=content))
             else:
-                lc_messages.append(HumanMessage(content=content))
-
-        response = await llm.ainvoke(lc_messages)
+                lc_msgs.append(HumanMessage(content=content))
+        response = await llm.ainvoke(lc_msgs)
         return {"content": response.content, "model": model, "provider": "groq"}
 
     # ── Cerebras ──────────────────────────────────────────────────────────────
     if client == "cerebras":
-        import httpx, os
+        import httpx
         r = await httpx.AsyncClient(timeout=60).post(
             "https://api.cerebras.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {os.environ['CEREBRAS_API_KEY']}"},

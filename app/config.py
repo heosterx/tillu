@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     cf_api_token: Optional[str] = Field(default=None, alias="CF_API_TOKEN")
     cf_account_id: Optional[str] = Field(default=None, alias="CF_ACCOUNT_ID")
     cf_gateway_id: str = Field(default="default", alias="CF_GATEWAY_ID")
+    cf_token_gpt: Optional[str] = Field(default=None, alias="CF_TOKEN_GPT")
+    cf_token_claude: Optional[str] = Field(default=None, alias="CF_TOKEN_CLAUDE")
 
     # Notion
     notion_token: Optional[str] = Field(default=None, alias="NOTION_TOKEN")
