@@ -1,7 +1,7 @@
 # TILLU WebSearch v2 - HuggingFace Space
 # SearXNG (primary) + DDG JSON + Google Lite fallbacks + Playwright
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget ca-certificates fonts-liberation fonts-noto-color-emoji \

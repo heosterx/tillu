@@ -1,14 +1,14 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-playwright==1.41.0
-httpx==0.26.0
-beautifulsoup4==4.12.3
-lxml==5.1.0
+fastapi==0.129.0
+uvicorn[standard]==0.46.0
+playwright==1.48.0
+httpx==0.28.1
+beautifulsoup4==4.13.1
+lxml==5.3.0
 readability-lxml==0.8.1
-python-dotenv==1.0.0
-tenacity==8.2.3
-orjson==3.9.12
+python-dotenv==1.0.1
+tenacity==9.0.0
+orjson==3.10.7
 langdetect==1.0.9
 
 # AI-Optimized Web Scraping
-crawl4ai>=0.4.0
+crawl4ai>=0.5.0
