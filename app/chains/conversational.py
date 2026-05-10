@@ -18,7 +18,6 @@ from app.config import settings
 from app.utils.logging import get_logger
 from app.chains.base import BaseChain, ChainType
 from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_context
-
 logger = get_logger("conversational_chain")
 
 
@@ -177,47 +176,6 @@ Current time: {ist_ctx['current_datetime_full']}"""
         # Determine model based on complexity
         word_count = len(user_input.split())
         use_quality = word_count > 50 or "?" in user_input
-
-        # ── Try Cloudflare AI Gateway first ──────────────────────────────────
-        if (settings.cf_account_id
-                and not settings.cf_account_id.startswith("YOUR_")):
-            try:
-                from app.providers.llm_router import available_providers
-                from app.providers.cloudflare_ai import CloudflareAI
-                avail = available_providers()
-                # Pick best CF model available
-                if avail.get("cf_openai"):
-                    cf_model = "openai/gpt-5.5-pro"
-                elif avail.get("cf_anthropic"):
-                    cf_model = "anthropic/claude-opus-4.6"
-                elif avail.get("cf_workers"):
-                    cf_model = "@cf/meta/llama-3.1-8b-instruct"
-                else:
-                    raise ValueError("No CF model available")
-                cf_llm = CloudflareAI(model=cf_model, max_tokens=1024, temperature=0.75)                system_prompt = self._build_personality_prompt(context)
-                cf_messages = [{"role": "system", "content": system_prompt}]
-                immediate_memory = context.get("immediate_memory", {}) if context else {}
-                for turn in immediate_memory.get("recent_turns", [])[-10:]:
-                    if turn.get("role") in ("user", "assistant"):
-                        cf_messages.append({"role": turn["role"], "content": turn.get("content", "")})
-                cf_messages.append({"role": "user", "content": user_input})
-                cf_response = await cf_llm.ainvoke(cf_messages)
-                latency_ms = int((time.time() - start_time) * 1000)
-                return {
-                    "response": {
-                        "type": "text",
-                        "content": apply_all_rules(cf_response.content),
-                        "structured_data": {},
-                    },
-                    "personality_mode": "sharp",
-                    "chain": self.chain_type.value,
-                    "model": "cf/openai/gpt-5.5-pro",
-                    "latency_ms": latency_ms,
-                    "tokens_used": 0,
-                    "sources": [],
-                }
-            except Exception as cf_err:
-                logger.warning(f"CF AI Gateway failed, falling back to Groq: {cf_err}")
 
         try:
             # Build personality-compiled system prompt
