@@ -50,7 +50,7 @@ sse-starlette==2.1.0
 # Scheduling & Background
 APScheduler==3.11.0
 Celery==5.4.0
-croniter==2.1.0
+croniter==6.2.2
 schedule==1.2.2
 
 # Utils
