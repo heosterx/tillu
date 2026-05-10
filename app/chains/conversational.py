@@ -17,8 +17,7 @@ from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from app.config import settings
 from app.utils.logging import get_logger
 from app.chains.base import BaseChain, ChainType
-from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_context
-logger = get_logger("conversational_chain")
+from app.core.indian_rules import apply_all_rules, get_rules_prompt, get_current_ist_contextlogger = get_logger("conversational_chain")
 
 
 class ConversationalChain(BaseChain):
@@ -176,6 +175,37 @@ Current time: {ist_ctx['current_datetime_full']}"""
         # Determine model based on complexity
         word_count = len(user_input.split())
         use_quality = word_count > 50 or "?" in user_input
+
+        # ── Try HF Inference Providers first (free, 13 models) ───────────────
+        if settings.hf_token and not settings.hf_token.startswith("YOUR_"):
+            try:
+                from app.providers.hf_inference import HFInference
+                task = "quality_chat" if use_quality else "quick_chat"
+                hf_llm = HFInference(task=task, max_tokens=1024, temperature=0.75)
+                system_prompt = self._build_personality_prompt(context)
+                hf_messages = [{"role": "system", "content": system_prompt}]
+                immediate_memory = context.get("immediate_memory", {}) if context else {}
+                for turn in immediate_memory.get("recent_turns", [])[-10:]:
+                    if turn.get("role") in ("user", "assistant"):
+                        hf_messages.append({"role": turn["role"], "content": turn.get("content", "")})
+                hf_messages.append({"role": "user", "content": user_input})
+                hf_response = await hf_llm.ainvoke(hf_messages)
+                latency_ms = int((time.time() - start_time) * 1000)
+                return {
+                    "response": {
+                        "type": "text",
+                        "content": apply_all_rules(hf_response.content),
+                        "structured_data": {},
+                    },
+                    "personality_mode": "sharp",
+                    "chain": self.chain_type.value,
+                    "model": f"hf/{task}",
+                    "latency_ms": latency_ms,
+                    "tokens_used": 0,
+                    "sources": [],
+                }
+            except Exception as hf_err:
+                logger.warning(f"HF Inference failed, falling back to Groq: {hf_err}")
 
         try:
             # Build personality-compiled system prompt
