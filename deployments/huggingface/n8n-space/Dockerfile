@@ -45,7 +45,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # ── n8n install — pinned to last stable release on Node 22 ───────────────────
-RUN npm install -g n8n@2.16.1 --ignore-scripts=false
+RUN npm install -g n8n@2.20.0 --ignore-scripts=false
 
 # ── n8n data directory ────────────────────────────────────────────────────────
 ARG BASE_PATH=/root/.n8n
