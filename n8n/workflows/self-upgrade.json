@@ -1,0 +1,84 @@
+{
+  "name": "WF-17: TILLU Self-Upgrade",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "weeks", "weekday": 1, "hours": 3, "minutes": 0 }]
+        }
+      },
+      "id": "schedule-monday-3am",
+      "name": "Monday 3:00 AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/workflow/self-upgrade",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Cron-Secret",
+              "value": "={{ $env.TILLU_CRON_SECRET }}"
+            }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "call-self-upgrade",
+      "name": "Call Self-Upgrade API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const result = $input.first().json;\nconst synced = result.synced || 0;\nconst failed = result.failed || 0;\n\nreturn {\n  json: {\n    status: result.status,\n    synced,\n    failed,\n    message_hi: result.message_hi,\n    message_en: result.message_en,\n    time_ist: result.time_ist,\n    notify: synced > 0 || failed > 0\n  }\n};"
+      },
+      "id": "process-result",
+      "name": "Process Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TILLU_GATEWAY_URL }}/internal/publish-event",
+        "method": "POST",
+        "body": {
+          "event_type": "system_upgrade",
+          "priority": "low",
+          "message_hi": "={{ $json.message_hi }}",
+          "message_en": "={{ $json.message_en }}",
+          "data": {
+            "synced": "={{ $json.synced }}",
+            "failed": "={{ $json.failed }}"
+          }
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "notify-user",
+      "name": "Notify User (if changes)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Monday 3:00 AM IST": {
+      "main": [[{ "node": "Call Self-Upgrade API", "type": "main", "index": 0 }]]
+    },
+    "Call Self-Upgrade API": {
+      "main": [[{ "node": "Process Result", "type": "main", "index": 0 }]]
+    },
+    "Process Result": {
+      "main": [[{ "node": "Notify User (if changes)", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "system", "id": "system-tag" }]
+}

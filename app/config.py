@@ -107,6 +107,9 @@ class Settings(BaseSettings):
         alias="PLAYWRIGHT_SERVICE_URL"
     )
     n8n_webhook_url: Optional[str] = Field(default=None, alias="N8N_WEBHOOK_URL")
+    n8n_url: Optional[str] = Field(default=None, alias="N8N_URL")
+    n8n_email: Optional[str] = Field(default=None, alias="N8N_EMAIL")
+    n8n_password: Optional[str] = Field(default=None, alias="N8N_PASSWORD")
     
     # Rate Limiting
     rate_limit_per_minute: int = Field(default=60, alias="RATE_LIMIT_PER_MINUTE")
