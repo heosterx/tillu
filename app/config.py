@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     
     # Services
     searxng_url: str = Field(default="http://localhost:8080", alias="SEARXNG_URL")
+    websearch_url: str = Field(default="https://tillu-ai-tillu-websearch.hf.space", alias="WEBSEARCH_URL")
     playwright_service_url: str = Field(
         default="http://localhost:3001",
         alias="PLAYWRIGHT_SERVICE_URL"
