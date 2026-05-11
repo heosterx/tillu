@@ -21,7 +21,7 @@ from app.config import settings
 from app.utils.logging import get_logger
 from app.utils.database import db
 from app.transformers.embeddings import embedding_generator
-from app.tools.search_tools import WebSearchTool, BraveSearchTool
+from app.tools.search_tools import WebSearchTool
 from app.transformers.extractors import NERExtractor, Summarizer
 
 logger = get_logger("research_agent")
@@ -74,7 +74,6 @@ class ResearchAgent:
         
         # Tools
         self.web_search = WebSearchTool()
-        self.brave_search = BraveSearchTool()
         self.ner = NERExtractor()
         self.summarizer = Summarizer()
     
