@@ -1,16 +1,14 @@
 """
-Chain 03: ReAct Tool Agent
-Type: LangChain ReAct Agent
+Chain 03: ReAct Tool Agent (Simplified)
+Type: LLM-based reasoning with tool descriptions
 Trigger: action_required | real_world_query | multi-step task
-Model: Gemini Pro (best tool-use) / OpenRouter fallback
-Tools: Full tool registry (32 tools)
-Output: Action results + natural language explanation
+Model: Groq / Cerebras fallback
+Tools: Tool registry (read-only for now)
+Output: Reasoning + natural language explanation
 """
 from typing import Any, Dict, List, Optional
 import time
-from langchain.agents import AgentExecutor, create_react_agent
-from langchain.prompts import PromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import PromptTemplate
 
 from app.config import settings
 from app.chains.base import BaseChain, ChainType
@@ -22,59 +20,77 @@ logger = get_logger("react_agent_chain")
 
 class ReActAgentChain(BaseChain):
     """
-    ReAct agent chain for multi-step tasks with tool use
+    Simplified ReAct-style chain for multi-step reasoning
+    Uses LLM to reason about tasks (tool execution handled separately)
     """
     
     chain_type = ChainType.REACT_AGENT
-    description = "Multi-step reasoning with tool execution"
+    description = "Multi-step reasoning with tool awareness"
     
-    REACT_PROMPT = """You are TILLU, a helpful AI assistant. Answer the following question as best you can.
+    REASONING_PROMPT = """You are TILLU, a helpful AI assistant with access to various tools.
 
-You have access to the following tools:
-{tools}
+Available tools:
+{tools_description}
 
-Use the following format:
+For the user's query, provide:
+1. Your reasoning about what needs to be done
+2. Which tools would be helpful (if any)
+3. Your answer or recommendation
 
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
+Query: {input}
 
-Begin!
-
-Question: {input}
-Thought:{agent_scratchpad}"""
+Provide a clear, helpful response."""
     
     def __init__(self):
         super().__init__()
         self.llm = None
-        self.agent = None
         self._initialize()
     
     def _initialize(self):
-        """Initialize LLM and agent"""
-        if settings.google_api_key:
+        """Initialize LLM"""
+        # Try Groq first (most reliable)
+        if settings.groq_api_key:
             try:
-                self.llm = ChatGoogleGenerativeAI(
-                    model="gemini-pro",
-                    google_api_key=settings.google_api_key,
+                from langchain_groq import ChatGroq
+                self.llm = ChatGroq(
+                    api_key=settings.groq_api_key,
+                    model_name="llama-3.1-70b-versatile",
                     temperature=0.7
                 )
+                logger.info("Groq LLM initialized for ReAct chain")
+                return
             except Exception as e:
-                logger.error(f"Failed to initialize Gemini: {e}")
+                logger.warning(f"Failed to initialize Groq: {e}")
         
-        # Fallback to Groq if Gemini not available
-        if not self.llm and settings.groq_api_key:
-            from langchain_groq import ChatGroq
-            self.llm = ChatGroq(
-                api_key=settings.groq_api_key,
-                model_name="llama-3.1-70b-versatile",
-                temperature=0.7
-            )
+        # Try Cerebras as fallback
+        if settings.cerebras_api_key:
+            try:
+                from langchain_cerebras import ChatCerebras
+                self.llm = ChatCerebras(
+                    api_key=settings.cerebras_api_key,
+                    model_name="llama-3.3-70b",
+                    temperature=0.7
+                )
+                logger.info("Cerebras LLM initialized for ReAct chain")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to initialize Cerebras: {e}")
+        
+        # Try OpenAI as last resort
+        if settings.openai_api_key:
+            try:
+                from langchain_openai import ChatOpenAI
+                self.llm = ChatOpenAI(
+                    api_key=settings.openai_api_key,
+                    model_name="gpt-3.5-turbo",
+                    temperature=0.7
+                )
+                logger.info("OpenAI LLM initialized for ReAct chain")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI: {e}")
+        
+        logger.warning("No LLM available for ReAct chain - will use fallback")
     
     async def execute(
         self,
@@ -82,14 +98,14 @@ Thought:{agent_scratchpad}"""
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Execute ReAct agent
+        Execute reasoning chain
         
         Args:
             input_data: Contains 'text' (task/query)
-            context: Full context with available tools
+            context: Full context
             
         Returns:
-            Results with tool outputs and explanation
+            Results with reasoning and explanation
         """
         start_time = time.time()
         
@@ -97,12 +113,12 @@ Thought:{agent_scratchpad}"""
             return {
                 "response": {
                     "type": "text",
-                    "content": "I'm unable to execute tools right now. Let me answer based on my knowledge.",
+                    "content": "I'm unable to process your request right now.",
                     "structured_data": {}
                 },
                 "personality_mode": "neutral",
                 "chain": self.chain_type.value,
-                "model": "fallback",
+                "model": "unavailable",
                 "latency_ms": int((time.time() - start_time) * 1000),
                 "tokens_used": 0,
                 "sources": []
@@ -111,78 +127,46 @@ Thought:{agent_scratchpad}"""
         query = input_data.get("text", "")
         
         try:
-            # Get tools
-            tools = ToolRegistry.get_langchain_tools()
+            # Get tool descriptions
+            tools = ToolRegistry.get_all()
+            tools_description = "\n".join([
+                f"- {tool.metadata.name}: {tool.metadata.description}"
+                for tool in tools[:10]  # Limit to first 10 tools
+            ])
             
-            if not tools:
-                # No tools available, direct answer
-                response = await self.llm.ainvoke([
-                    ("human", query)
-                ])
-                
-                return {
-                    "response": {
-                        "type": "text",
-                        "content": response.content,
-                        "structured_data": {}
-                    },
-                    "personality_mode": "sharp",
-                    "chain": self.chain_type.value,
-                    "model": "groq-70b",
-                    "latency_ms": int((time.time() - start_time) * 1000),
-                    "tokens_used": 0,
-                    "sources": []
-                }
-            
-            # Create ReAct agent
-            prompt = PromptTemplate.from_template(self.REACT_PROMPT)
-            agent = create_react_agent(self.llm, tools, prompt)
-            
-            # Execute
-            agent_executor = AgentExecutor(
-                agent=agent,
-                tools=tools,
-                verbose=False,
-                handle_parsing_errors=True,
-                max_iterations=5
+            # Create prompt
+            prompt = PromptTemplate.from_template(self.REASONING_PROMPT)
+            formatted_prompt = prompt.format(
+                tools_description=tools_description,
+                input=query
             )
             
-            result = await agent_executor.ainvoke({"input": query})
+            # Get response from LLM
+            response = await self.llm.ainvoke([
+                ("human", formatted_prompt)
+            ])
             
             elapsed_ms = int((time.time() - start_time) * 1000)
             
-            # Extract tool outputs
-            intermediate_steps = result.get("intermediate_steps", [])
-            tool_outputs = []
-            for step in intermediate_steps:
-                if len(step) >= 2:
-                    action, observation = step[0], step[1]
-                    tool_outputs.append({
-                        "tool": action.tool if hasattr(action, 'tool') else str(action),
-                        "input": action.tool_input if hasattr(action, 'tool_input') else str(action),
-                        "output": str(observation)[:500]  # Truncate
-                    })
-            
             return {
                 "response": {
-                    "type": "action_result",
-                    "content": result.get("output", "Task completed."),
+                    "type": "reasoning",
+                    "content": response.content,
                     "structured_data": {
-                        "tools_used": len(tool_outputs),
-                        "tool_outputs": tool_outputs,
-                        "steps_taken": len(intermediate_steps)
+                        "tools_available": len(tools),
+                        "reasoning_type": "multi_step"
                     }
                 },
-                "personality_mode": "direct",
+                "personality_mode": "analytical",
                 "chain": self.chain_type.value,
-                "model": "gemini-pro" if settings.google_api_key else "groq-70b",
+                "model": "groq-70b",
                 "latency_ms": elapsed_ms,
                 "tokens_used": 0,
                 "sources": []
             }
             
         except Exception as e:
-            logger.error(f"ReAct agent error: {e}")
+            logger.error(f"ReAct chain error: {e}")
             
             # Fallback to direct LLM
             try:
@@ -192,7 +176,7 @@ Thought:{agent_scratchpad}"""
                     "response": {
                         "type": "text",
                         "content": response.content,
-                        "structured_data": {"error": str(e), "fallback": True}
+                        "structured_data": {"fallback": True}
                     },
                     "personality_mode": "neutral",
                     "chain": self.chain_type.value,
@@ -201,7 +185,8 @@ Thought:{agent_scratchpad}"""
                     "tokens_used": 0,
                     "sources": []
                 }
-            except:
+            except Exception as fallback_error:
+                logger.error(f"Fallback error: {fallback_error}")
                 return {
                     "response": {
                         "type": "text",

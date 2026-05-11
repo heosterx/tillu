@@ -26,6 +26,15 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("Starting TILLU Gateway...")
     
+    # Check provider availability
+    try:
+        from app.utils.provider_check import check_providers_on_startup
+        check_providers_on_startup()
+        logger.info("Provider validation passed")
+    except Exception as e:
+        logger.error("Provider validation failed", error=str(e))
+        raise
+    
     # Connect to Redis
     try:
         await cache.connect()
