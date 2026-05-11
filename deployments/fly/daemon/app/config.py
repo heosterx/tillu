@@ -40,15 +40,12 @@ class Settings(BaseSettings):
     upstash_redis_rest_url: Optional[str] = Field(default=None, alias="UPSTASH_REDIS_REST_URL")
     upstash_redis_rest_token: Optional[str] = Field(default=None, alias="UPSTASH_REDIS_REST_TOKEN")
     
-    # LLM Providers
+    # LLM Providers (Free tier only)
     groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
     cerebras_api_key: Optional[str] = Field(default=None, alias="CEREBRAS_API_KEY")
+    together_api_key: Optional[str] = Field(default=None, alias="TOGETHER_API_KEY")
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
-    cohere_api_key: Optional[str] = Field(default=None, alias="COHERE_API_KEY")
-    anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
-    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
-    together_api_key: Optional[str] = Field(default=None, alias="TOGETHER_API_KEY")
     
     # Hugging Face
     hf_token: Optional[str] = Field(default=None, alias="HF_TOKEN")

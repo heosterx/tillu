@@ -1,28 +1,28 @@
 """
 TILLU Universal LLM Router
 ============================
-Single entry point for ALL LLM providers.
+Single entry point for ALL LLM providers (Free tier only).
 Automatically selects the best available model per task.
 
 Providers integrated (in priority order per task):
   1. Groq          — fastest, free 14.4k tokens/min
   2. Cerebras      — deep reasoning, free ~500 req/day
-  3. HF Inference  — 13 free models via router.huggingface.co
-  4. OpenRouter    — 200+ models, 200 free req/day
-  5. Google Gemini — multimodal, 1500 free req/day
-  6. OpenAI        — GPT models (needs credits)
-  7. Anthropic     — Claude models (needs credits)
+  3. Together AI   — Meta Llama 3.3 70B, DeepSeek R1, FLUX.1 image gen
+  4. HF Inference  — 13 free models via router.huggingface.co
+  5. OpenRouter    — 200+ models, 200 free req/day
+  6. Google Gemini — multimodal, 1500 free req/day
 
 Task → Provider mapping:
-  quick_chat      → Groq 8B → HF Gemma → HF Qwen
-  quality_chat    → Groq 70B → HF Llama-70B → Cerebras
-  empathy         → Groq 70B → HF Gemma → Cerebras
-  deep_reasoning  → Cerebras → HF DeepSeek-R1 → Groq 70B
-  research        → Cerebras → HF DeepSeek-V3 → Groq 70B
-  coding          → HF Qwen-Coder → HF DeepSeek-V3 → Groq 70B
-  analysis        → Cerebras → HF DeepSeek-V3 → Groq 70B
-  creative        → Groq 70B → HF Gemma → OpenRouter
+  quick_chat      → Groq 8B → Together Llama 3.3 → HF Gemma
+  quality_chat    → Groq 70B → Together Llama 3.3 → Cerebras
+  empathy         → Groq 70B → Together Llama 3.3 → Cerebras
+  deep_reasoning  → Together DeepSeek-R1 → Cerebras → Groq 70B
+  research        → Together DeepSeek-R1 → Cerebras → Groq 70B
+  coding          → Together Llama 3.3 → HF Qwen-Coder → Groq 70B
+  analysis        → Together DeepSeek-R1 → Cerebras → Groq 70B
+  creative        → Groq 70B → Together Llama 3.3 → HF Gemma
   multimodal      → Google Gemini Flash
+  image_gen       → Together FLUX.1 [schnell]
   hindi_primary   → HF Gemma-3-27B → Groq 70B (best Hinglish)
 """
 
@@ -48,35 +48,43 @@ def providers() -> dict[str, bool]:
     return {
         "groq":       _has("GROQ_API_KEY"),
         "cerebras":   _has("CEREBRAS_API_KEY"),
+        "together":   _has("TOGETHER_API_KEY"),
         "hf":         _has("HF_TOKEN"),
         "openrouter": _has("OPENROUTER_API_KEY"),
         "google":     _has("GOOGLE_API_KEY"),
-    
     }
 
 
 # ── Model specs per provider ──────────────────────────────────────────────────
 
 GROQ_MODELS = {
-    "fast":    "llama-3.1-8b-instant",       # ~200ms, 14.4k tok/min
-    "quality": "llama-3.1-70b-versatile",    # ~700ms, 6k tok/min
+    "fast":    "llama-3.1-8b-instant",
+    "quality": "llama-3.1-70b-versatile",
     "coding":  "llama-3.1-70b-versatile",
 }
 
 CEREBRAS_MODELS = {
-    "fast":    "llama3.1-8b",                # ~100ms, ultra-fast
-    "quality": "qwen-3-235b-a22b-instruct-2507",  # best available
+    "fast":    "llama3.1-8b",
+    "quality": "qwen-3-235b-a22b-instruct-2507",
+}
+
+TOGETHER_MODELS = {
+    "fast":      "meta-llama/Llama-3.3-8B-Instruct-Turbo",
+    "quality":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "deep":      "deepseek-ai/DeepSeek-R1",
+    "image":     "black-forest-labs/FLUX.1-schnell",
 }
 
 HF_MODELS = {
-    "fastest":  "Qwen/Qwen3-8B",                           # 0.9s
-    "fast":     "google/gemma-3-27b-it",                   # 2.9s, best Hinglish
-    "quality":  "meta-llama/Llama-3.3-70B-Instruct",       # 6.4s
-    "reasoning":"deepseek-ai/DeepSeek-R1-Distill-Llama-70B",# 1.1s
-    "deep":     "deepseek-ai/DeepSeek-R1",                 # 4.5s
-    "coding":   "Qwen/Qwen2.5-Coder-32B-Instruct",         # 7.4s
-    "analysis": "deepseek-ai/DeepSeek-V3-0324",            # 6.0s
-    "hindi":    "google/gemma-3-27b-it",                   # best Hinglish
+    "fastest":  "Qwen/Qwen3-8B",
+    "fast":     "google/gemma-3-27b-it",
+    "quality":  "meta-llama/Llama-3.3-70B-Instruct",
+    "reasoning":"deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "deep":     "deepseek-ai/DeepSeek-R1",
+    "coding":   "Qwen/Qwen2.5-Coder-32B-Instruct",
+    "analysis": "deepseek-ai/DeepSeek-V3-0324",
+    "hindi":    "google/gemma-3-27b-it",
 }
 
 OPENROUTER_MODELS = {
@@ -86,93 +94,83 @@ OPENROUTER_MODELS = {
 }
 
 GOOGLE_MODELS = {
-    "fast":      "gemini-1.5-flash",
-    "quality":   "gemini-1.5-pro",
-    "multimodal":"gemini-1.5-flash",
+    "fast":      "gemini-2.5-flash",
+    "quality":   "gemini-2.5-pro",
+    "multimodal":"gemini-2.5-flash-lite",
 }
 
 
-# ── Task → model selection ────────────────────────────────────────────────────
-
 def select(task: str = "quick_chat", lang: str = "en") -> dict[str, Any]:
-    """
-    Select best provider + model for a task.
-    Returns {"provider", "model", "client"}.
-    """
+    """Select best provider + model for a task."""
     p = providers()
 
-    # Hindi-primary: HF Gemma is best for Hinglish
     if lang == "hi" and p["hf"]:
         return {"provider": "hf", "model": HF_MODELS["hindi"], "client": "hf"}
 
-    # ── quick_chat ────────────────────────────────────────────────────────────
     if task in ("quick_chat", "small_talk", "general_query", "follow_up"):
         if p["groq"]:
             return {"provider": "groq", "model": GROQ_MODELS["fast"], "client": "groq"}
+        if p["together"]:
+            return {"provider": "together", "model": TOGETHER_MODELS["fast"], "client": "together"}
         if p["hf"]:
             return {"provider": "hf", "model": HF_MODELS["fastest"], "client": "hf"}
-        if p["cerebras"]:
-            return {"provider": "cerebras", "model": CEREBRAS_MODELS["fast"], "client": "cerebras"}
 
-    # ── quality_chat / empathy ────────────────────────────────────────────────
     if task in ("quality_chat", "empathy", "creative", "long_form"):
         if p["groq"]:
             return {"provider": "groq", "model": GROQ_MODELS["quality"], "client": "groq"}
+        if p["together"]:
+            return {"provider": "together", "model": TOGETHER_MODELS["quality"], "client": "together"}
         if p["hf"]:
             return {"provider": "hf", "model": HF_MODELS["quality"], "client": "hf"}
-        if p["cerebras"]:
-            return {"provider": "cerebras", "model": CEREBRAS_MODELS["quality"], "client": "cerebras"}
 
-    # ── deep_reasoning / research ─────────────────────────────────────────────
     if task in ("deep_reasoning", "research"):
+        if p["together"]:
+            return {"provider": "together", "model": TOGETHER_MODELS["reasoning"], "client": "together"}
         if p["cerebras"]:
             return {"provider": "cerebras", "model": CEREBRAS_MODELS["quality"], "client": "cerebras"}
-        if p["hf"]:
-            return {"provider": "hf", "model": HF_MODELS["reasoning"], "client": "hf"}
         if p["groq"]:
             return {"provider": "groq", "model": GROQ_MODELS["quality"], "client": "groq"}
 
-    # ── analysis ──────────────────────────────────────────────────────────────
     if task == "analysis":
+        if p["together"]:
+            return {"provider": "together", "model": TOGETHER_MODELS["reasoning"], "client": "together"}
         if p["cerebras"]:
             return {"provider": "cerebras", "model": CEREBRAS_MODELS["quality"], "client": "cerebras"}
-        if p["hf"]:
-            return {"provider": "hf", "model": HF_MODELS["analysis"], "client": "hf"}
         if p["groq"]:
             return {"provider": "groq", "model": GROQ_MODELS["quality"], "client": "groq"}
 
-    # ── coding ────────────────────────────────────────────────────────────────
     if task == "coding":
+        if p["together"]:
+            return {"provider": "together", "model": TOGETHER_MODELS["quality"], "client": "together"}
         if p["hf"]:
             return {"provider": "hf", "model": HF_MODELS["coding"], "client": "hf"}
-        if p["openrouter"]:
-            return {"provider": "openrouter", "model": OPENROUTER_MODELS["coding"], "client": "openrouter"}
         if p["groq"]:
             return {"provider": "groq", "model": GROQ_MODELS["quality"], "client": "groq"}
 
-    # ── multimodal ────────────────────────────────────────────────────────────
+    if task == "image_generation":
+        if p["together"]:
+            return {"provider": "together", "model": TOGETHER_MODELS["image"], "client": "together"}
+
     if task == "multimodal":
         if p["google"]:
             return {"provider": "google", "model": GOOGLE_MODELS["multimodal"], "client": "google"}
 
-    # ── Universal fallback chain ──────────────────────────────────────────────
     for provider, model, client in [
         ("groq",       GROQ_MODELS["fast"],       "groq"),
-        ("hf",         HF_MODELS["fastest"],       "hf"),
-        ("cerebras",   CEREBRAS_MODELS["fast"],    "cerebras"),
-        ("openrouter", OPENROUTER_MODELS["free"],  "openrouter"),
-        ("google",     GOOGLE_MODELS["fast"],      "google"),
+        ("together",   TOGETHER_MODELS["fast"],   "together"),
+        ("hf",         HF_MODELS["fastest"],      "hf"),
+        ("cerebras",   CEREBRAS_MODELS["fast"],   "cerebras"),
+        ("openrouter", OPENROUTER_MODELS["free"], "openrouter"),
+        ("google",     GOOGLE_MODELS["fast"],     "google"),
     ]:
         if p.get(provider):
             return {"provider": provider, "model": model, "client": client}
 
     raise RuntimeError(
         "No LLM provider configured.\n"
-        "Set at least GROQ_API_KEY (free at console.groq.com) or HF_TOKEN."
+        "Set at least GROQ_API_KEY (free at console.groq.com), TOGETHER_API_KEY (free at together.ai), or HF_TOKEN."
     )
 
-
-# ── Universal invoke ──────────────────────────────────────────────────────────
 
 async def invoke(
     messages: list[dict],
@@ -183,21 +181,7 @@ async def invoke(
     model_override: str | None = None,
     provider_override: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Route and invoke the best LLM for the task.
-
-    Args:
-        messages:          OpenAI-style message list
-        task:              Task type for routing
-        lang:              "hi" | "en" | "auto"
-        max_tokens:        Max tokens
-        temperature:       Sampling temperature
-        model_override:    Force a specific model ID
-        provider_override: Force a specific provider
-
-    Returns:
-        {"content": str, "model": str, "provider": str, "latency_ms": int}
-    """
+    """Route and invoke the best LLM for the task."""
     import time
     t0 = time.time()
 
@@ -216,7 +200,6 @@ async def invoke(
 
     content = ""
 
-    # ── Groq ──────────────────────────────────────────────────────────────────
     if client == "groq":
         async with httpx.AsyncClient(timeout=30) as c:
             r = await c.post(
@@ -229,7 +212,6 @@ async def invoke(
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
 
-    # ── Cerebras ──────────────────────────────────────────────────────────────
     elif client == "cerebras":
         async with httpx.AsyncClient(timeout=60) as c:
             r = await c.post(
@@ -241,14 +223,24 @@ async def invoke(
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
 
-    # ── HF Inference ──────────────────────────────────────────────────────────
+    elif client == "together":
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(
+                "https://api.together.xyz/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.environ['TOGETHER_API_KEY']}",
+                         "Content-Type": "application/json"},
+                json={"model": model, "messages": messages,
+                      "max_tokens": max_tokens, "temperature": temperature},
+            )
+            r.raise_for_status()
+            content = r.json()["choices"][0]["message"]["content"]
+
     elif client == "hf":
         from app.providers.hf_inference import chat as hf_chat
         result = await hf_chat(messages=messages, model=model, max_tokens=max_tokens,
                                temperature=temperature)
         content = result["content"]
 
-    # ── OpenRouter ────────────────────────────────────────────────────────────
     elif client == "openrouter":
         async with httpx.AsyncClient(timeout=60) as c:
             r = await c.post(
@@ -263,10 +255,8 @@ async def invoke(
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
 
-    # ── Google Gemini ─────────────────────────────────────────────────────────
     elif client == "google":
         async with httpx.AsyncClient(timeout=60) as c:
-            # Convert to Gemini format
             gemini_msgs = [{"role": "user" if m["role"] != "assistant" else "model",
                            "parts": [{"text": m["content"]}]} for m in messages
                           if m["role"] != "system"]
@@ -284,34 +274,6 @@ async def invoke(
             r.raise_for_status()
             content = r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-    # ── OpenAI ────────────────────────────────────────────────────────────────
-    elif client == "openai":
-        async with httpx.AsyncClient(timeout=60) as c:
-            r = await c.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens},
-            )
-            r.raise_for_status()
-            content = r.json()["choices"][0]["message"]["content"]
-
-    # ── Anthropic ─────────────────────────────────────────────────────────────
-    elif client == "anthropic":
-        system = next((m["content"] for m in messages if m["role"] == "system"), None)
-        user_msgs = [m for m in messages if m["role"] != "system"]
-        async with httpx.AsyncClient(timeout=60) as c:
-            payload = {"model": model, "max_tokens": max_tokens, "messages": user_msgs}
-            if system:
-                payload["system"] = system
-            r = await c.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": os.environ["ANTHROPIC_API_KEY"],
-                         "anthropic-version": "2023-06-01"},
-                json=payload,
-            )
-            r.raise_for_status()
-            content = r.json()["content"][0]["text"]
-
     else:
         raise RuntimeError(f"Unknown client: {client}")
 
@@ -326,18 +288,8 @@ async def invoke(
     }
 
 
-# ── LangChain-compatible wrapper ──────────────────────────────────────────────
-
 class TilluLLM:
-    """
-    Universal LangChain-compatible LLM wrapper.
-    Automatically routes to the best available provider.
-
-    Usage:
-        llm = TilluLLM(task="quality_chat", lang="hi")
-        response = await llm.ainvoke(messages)
-        print(response.content)
-    """
+    """Universal LangChain-compatible LLM wrapper."""
 
     def __init__(
         self,

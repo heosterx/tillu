@@ -76,20 +76,6 @@ Provide a clear, helpful response."""
             except Exception as e:
                 logger.warning(f"Failed to initialize Cerebras: {e}")
         
-        # Try OpenAI as last resort
-        if settings.openai_api_key:
-            try:
-                from langchain_openai import ChatOpenAI
-                self.llm = ChatOpenAI(
-                    api_key=settings.openai_api_key,
-                    model_name="gpt-3.5-turbo",
-                    temperature=0.7
-                )
-                logger.info("OpenAI LLM initialized for ReAct chain")
-                return
-            except Exception as e:
-                logger.warning(f"Failed to initialize OpenAI: {e}")
-        
         logger.warning("No LLM available for ReAct chain - will use fallback")
     
     async def execute(

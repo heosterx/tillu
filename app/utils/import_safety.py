@@ -82,14 +82,12 @@ def check_package_available(package_name: str) -> bool:
 
 
 def get_available_llm_providers() -> dict[str, bool]:
-    """Get availability of all LLM providers"""
+    """Get availability of all LLM providers (free tier only)"""
     return {
         "groq": check_package_available("langchain_groq"),
         "cerebras": check_package_available("langchain_cerebras"),
-        "openai": check_package_available("langchain_openai"),
-        "anthropic": check_package_available("langchain_anthropic"),
+        "together": check_package_available("together"),
         "google": check_package_available("langchain_google_genai"),
-        "cohere": check_package_available("langchain_cohere"),
     }
 
 
@@ -99,7 +97,7 @@ def validate_at_least_one_provider() -> bool:
     has_provider = any(available.values())
     
     if not has_provider:
-        logger.error("No LLM providers available. Please install at least one: langchain-groq, langchain-cerebras, langchain-openai, etc.")
+        logger.error("No LLM providers available. Please install at least one: langchain-groq, langchain-cerebras, together, etc.")
         return False
     
     available_list = [k for k, v in available.items() if v]
