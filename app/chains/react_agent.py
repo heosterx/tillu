@@ -2,14 +2,13 @@
 Chain 03: ReAct Tool Agent (Simplified)
 Type: LLM-based reasoning with tool descriptions
 Trigger: action_required | real_world_query | multi-step task
-Model: Gemini Pro / Groq fallback
+Model: Groq / Cerebras fallback
 Tools: Tool registry (read-only for now)
 Output: Reasoning + natural language explanation
 """
 from typing import Any, Dict, List, Optional
 import time
 from langchain_core.prompts import PromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.config import settings
 from app.chains.base import BaseChain, ChainType
@@ -49,24 +48,49 @@ Provide a clear, helpful response."""
     
     def _initialize(self):
         """Initialize LLM"""
-        if settings.google_api_key:
+        # Try Groq first (most reliable)
+        if settings.groq_api_key:
             try:
-                self.llm = ChatGoogleGenerativeAI(
-                    model="gemini-pro",
-                    google_api_key=settings.google_api_key,
+                from langchain_groq import ChatGroq
+                self.llm = ChatGroq(
+                    api_key=settings.groq_api_key,
+                    model_name="llama-3.1-70b-versatile",
                     temperature=0.7
                 )
+                logger.info("Groq LLM initialized for ReAct chain")
+                return
             except Exception as e:
-                logger.error(f"Failed to initialize Gemini: {e}")
+                logger.warning(f"Failed to initialize Groq: {e}")
         
-        # Fallback to Groq if Gemini not available
-        if not self.llm and settings.groq_api_key:
-            from langchain_groq import ChatGroq
-            self.llm = ChatGroq(
-                api_key=settings.groq_api_key,
-                model_name="llama-3.1-70b-versatile",
-                temperature=0.7
-            )
+        # Try Cerebras as fallback
+        if settings.cerebras_api_key:
+            try:
+                from langchain_cerebras import ChatCerebras
+                self.llm = ChatCerebras(
+                    api_key=settings.cerebras_api_key,
+                    model_name="llama-3.3-70b",
+                    temperature=0.7
+                )
+                logger.info("Cerebras LLM initialized for ReAct chain")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to initialize Cerebras: {e}")
+        
+        # Try OpenAI as last resort
+        if settings.openai_api_key:
+            try:
+                from langchain_openai import ChatOpenAI
+                self.llm = ChatOpenAI(
+                    api_key=settings.openai_api_key,
+                    model_name="gpt-3.5-turbo",
+                    temperature=0.7
+                )
+                logger.info("OpenAI LLM initialized for ReAct chain")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI: {e}")
+        
+        logger.warning("No LLM available for ReAct chain - will use fallback")
     
     async def execute(
         self,
@@ -135,7 +159,7 @@ Provide a clear, helpful response."""
                 },
                 "personality_mode": "analytical",
                 "chain": self.chain_type.value,
-                "model": "gemini-pro" if settings.google_api_key else "groq-70b",
+                "model": "groq-70b",
                 "latency_ms": elapsed_ms,
                 "tokens_used": 0,
                 "sources": []
