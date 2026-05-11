@@ -8,19 +8,20 @@ Providers integrated (in priority order per task):
   1. Groq          — fastest, free 14.4k tokens/min
   2. Cerebras      — deep reasoning, free ~500 req/day
   3. Together AI   — Meta Llama 3.3 70B, DeepSeek R1, FLUX.1 image gen
-  4. HF Inference  — 13 free models via router.huggingface.co
-  5. OpenRouter    — 200+ models, 200 free req/day
-  6. Google Gemini — multimodal, 1500 free req/day
+  4. Cloudflare    — @cf/meta/llama-2-7b-chat-int8, @cf/mistral/mistral-7b-instruct-v0.1
+  5. HF Inference  — 13 free models via router.huggingface.co
+  6. OpenRouter    — 200+ models, 200 free req/day
+  7. Google Gemini — multimodal, 1500 free req/day
 
 Task → Provider mapping:
-  quick_chat      → Groq 8B → Together Llama 3.3 → HF Gemma
-  quality_chat    → Groq 70B → Together Llama 3.3 → Cerebras
-  empathy         → Groq 70B → Together Llama 3.3 → Cerebras
+  quick_chat      → Groq 8B → Together Llama 3.3 → CF Llama 2 → HF Gemma
+  quality_chat    → Groq 70B → Together Llama 3.3 → CF Mistral → Cerebras
+  empathy         → Groq 70B → Together Llama 3.3 → CF Mistral → Cerebras
   deep_reasoning  → Together DeepSeek-R1 → Cerebras → Groq 70B
   research        → Together DeepSeek-R1 → Cerebras → Groq 70B
   coding          → Together Llama 3.3 → HF Qwen-Coder → Groq 70B
   analysis        → Together DeepSeek-R1 → Cerebras → Groq 70B
-  creative        → Groq 70B → Together Llama 3.3 → HF Gemma
+  creative        → Groq 70B → Together Llama 3.3 → CF Mistral → HF Gemma
   multimodal      → Google Gemini Flash
   image_gen       → Together FLUX.1 [schnell]
   hindi_primary   → HF Gemma-3-27B → Groq 70B (best Hinglish)
@@ -49,6 +50,7 @@ def providers() -> dict[str, bool]:
         "groq":       _has("GROQ_API_KEY"),
         "cerebras":   _has("CEREBRAS_API_KEY"),
         "together":   _has("TOGETHER_API_KEY"),
+        "cloudflare": _has("CLOUDFLARE_API_TOKEN") and _has("CLOUDFLARE_ACCOUNT_ID"),
         "hf":         _has("HF_TOKEN"),
         "openrouter": _has("OPENROUTER_API_KEY"),
         "google":     _has("GOOGLE_API_KEY"),
@@ -74,6 +76,12 @@ TOGETHER_MODELS = {
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
     "deep":      "deepseek-ai/DeepSeek-R1",
     "image":     "black-forest-labs/FLUX.1-schnell",
+}
+
+CLOUDFLARE_MODELS = {
+    "fast":    "@cf/meta/llama-2-7b-chat-int8",
+    "quality": "@cf/mistral/mistral-7b-instruct-v0.1",
+    "coding":  "@cf/mistral/mistral-7b-instruct-v0.1",
 }
 
 HF_MODELS = {
@@ -112,6 +120,8 @@ def select(task: str = "quick_chat", lang: str = "en") -> dict[str, Any]:
             return {"provider": "groq", "model": GROQ_MODELS["fast"], "client": "groq"}
         if p["together"]:
             return {"provider": "together", "model": TOGETHER_MODELS["fast"], "client": "together"}
+        if p["cloudflare"]:
+            return {"provider": "cloudflare", "model": CLOUDFLARE_MODELS["fast"], "client": "cloudflare"}
         if p["hf"]:
             return {"provider": "hf", "model": HF_MODELS["fastest"], "client": "hf"}
 
@@ -120,6 +130,8 @@ def select(task: str = "quick_chat", lang: str = "en") -> dict[str, Any]:
             return {"provider": "groq", "model": GROQ_MODELS["quality"], "client": "groq"}
         if p["together"]:
             return {"provider": "together", "model": TOGETHER_MODELS["quality"], "client": "together"}
+        if p["cloudflare"]:
+            return {"provider": "cloudflare", "model": CLOUDFLARE_MODELS["quality"], "client": "cloudflare"}
         if p["hf"]:
             return {"provider": "hf", "model": HF_MODELS["quality"], "client": "hf"}
 
@@ -158,6 +170,7 @@ def select(task: str = "quick_chat", lang: str = "en") -> dict[str, Any]:
     for provider, model, client in [
         ("groq",       GROQ_MODELS["fast"],       "groq"),
         ("together",   TOGETHER_MODELS["fast"],   "together"),
+        ("cloudflare", CLOUDFLARE_MODELS["fast"], "cloudflare"),
         ("hf",         HF_MODELS["fastest"],      "hf"),
         ("cerebras",   CEREBRAS_MODELS["fast"],   "cerebras"),
         ("openrouter", OPENROUTER_MODELS["free"], "openrouter"),
@@ -234,6 +247,23 @@ async def invoke(
             )
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
+
+    elif client == "cloudflare":
+        async with httpx.AsyncClient(timeout=60) as c:
+            account_id = os.environ['CLOUDFLARE_ACCOUNT_ID']
+            api_token = os.environ['CLOUDFLARE_API_TOKEN']
+            r = await c.post(
+                f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}",
+                headers={"Authorization": f"Bearer {api_token}",
+                         "Content-Type": "application/json"},
+                json={"messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+            )
+            r.raise_for_status()
+            result = r.json()
+            if "result" in result and "response" in result["result"]:
+                content = result["result"]["response"]
+            else:
+                content = result.get("result", {}).get("response", "No response")
 
     elif client == "hf":
         from app.providers.hf_inference import chat as hf_chat

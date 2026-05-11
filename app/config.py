@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     together_api_key: Optional[str] = Field(default=None, alias="TOGETHER_API_KEY")
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
+    cloudflare_api_token: Optional[str] = Field(default=None, alias="CLOUDFLARE_API_TOKEN")
+    cloudflare_account_id: Optional[str] = Field(default=None, alias="CLOUDFLARE_ACCOUNT_ID")
     
     # Hugging Face
     hf_token: Optional[str] = Field(default=None, alias="HF_TOKEN")
