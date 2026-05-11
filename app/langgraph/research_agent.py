@@ -22,6 +22,7 @@ from app.utils.logging import get_logger
 from app.utils.database import db
 from app.transformers.embeddings import embedding_generator
 from app.tools.search_tools import WebSearchTool
+from app.tools.youtube_tools import YouTubeSearchTool, YouTubeTranscriptTool
 from app.transformers.extractors import NERExtractor, Summarizer
 
 logger = get_logger("research_agent")
@@ -74,6 +75,8 @@ class ResearchAgent:
         
         # Tools
         self.web_search = WebSearchTool()
+        self.youtube_search = YouTubeSearchTool()
+        self.youtube_transcript = YouTubeTranscriptTool()
         self.ner = NERExtractor()
         self.summarizer = Summarizer()
     
@@ -188,6 +191,7 @@ Be concise and specific."""
         """
         SEARCH NODE (parallel)
         → SearXNG: meta-search across all engines
+        → YouTube: semantic search within video content
         → ArXiv: academic papers
         → GitHub: technical repositories
         → Reddit: community perspectives
@@ -215,22 +219,28 @@ Be concise and specific."""
                             "angle": angle
                         })
                 
-                # Brave search for diversity
-                brave_result = await self.brave_search.execute(
-                    query=angle,
-                    num_results=3
-                )
+                # YouTube search for video content
+                try:
+                    youtube_result = await self.youtube_search.execute(
+                        query=angle,
+                        max_results=3,
+                        lang="auto"
+                    )
+                    
+                    if youtube_result.get("success"):
+                        for r in youtube_result.get("results", []):
+                            search_results.append({
+                                "url": r.get("url", f"https://www.youtube.com/watch?v={r.get('video_id')}"),
+                                "title": r.get("title", ""),
+                                "snippet": r.get("description", "")[:300],
+                                "source": "youtube",
+                                "angle": angle,
+                                "video_id": r.get("video_id"),
+                                "channel": r.get("channel", "")
+                            })
+                except Exception as e:
+                    self.logger.warning(f"YouTube search error for angle {angle}: {e}")
                 
-                if brave_result.get("success"):
-                    for r in brave_result.get("results", []):
-                        search_results.append({
-                            "url": r.get("url"),
-                            "title": r.get("title"),
-                            "snippet": r.get("description", ""),
-                            "source": "brave",
-                            "angle": angle
-                        })
-                        
             except Exception as e:
                 self.logger.error(f"Search error for angle {angle}: {e}")
         
@@ -245,13 +255,14 @@ Be concise and specific."""
         state["search_results"] = unique_results[:15]  # Top 15
         state["status"] = "search_complete"
         
-        self.logger.info(f"Found {len(unique_results)} unique results")
+        self.logger.info(f"Found {len(unique_results)} unique results (web + YouTube)")
         return state
     
     async def _scrape_node(self, state: ResearchState) -> ResearchState:
         """
         SCRAPE NODE
         → Playwright renders each URL
+        → YouTube: Extract transcript for video content
         → BART summarizes each page (100-200 words)
         """
         self.logger.info("Research: Scraping phase", urls=len(state["search_results"]))
@@ -262,9 +273,16 @@ Be concise and specific."""
         from app.tools.search_tools import ScrapePageTool
         import asyncio as _asyncio
         scraper = ScrapePageTool()
-        tasks = [scraper.execute(r["url"]) for r in state["search_results"][:6] if r.get("url")]
+        
+        # Separate YouTube and web results
+        youtube_results = [r for r in state["search_results"][:6] if r.get("source") == "youtube"]
+        web_results = [r for r in state["search_results"][:6] if r.get("source") != "youtube"]
+        
+        # Scrape web results
+        tasks = [scraper.execute(r["url"]) for r in web_results if r.get("url")]
         results = await _asyncio.gather(*tasks, return_exceptions=True)
-        for r, res in zip(state["search_results"][:6], results):
+        
+        for r, res in zip(web_results, results):
             if isinstance(res, dict) and res.get("success"):
                 text = res.get("text", "")[:2000]
                 summary = text if len(text) < 300 else text[:500]
@@ -278,7 +296,56 @@ Be concise and specific."""
                 "angle": r.get("angle"),
                 "word_count": len(summary.split()),
             })
-        self.logger.info("Scraped %d pages via WebSearch service" % len(scraped))
+        
+        # Extract YouTube transcripts
+        for r in youtube_results:
+            try:
+                video_url = r.get("url")
+                transcript_result = await self.youtube_transcript.execute(
+                    video_url=video_url,
+                    lang="auto",
+                    include_timestamps=False
+                )
+                
+                if transcript_result.get("success"):
+                    transcript = transcript_result.get("transcript", "")[:2000]
+                    summary = transcript if len(transcript) < 300 else transcript[:500]
+                    
+                    scraped.append({
+                        "url": video_url,
+                        "title": r.get("title", ""),
+                        "summary": summary,
+                        "source": "youtube_transcript",
+                        "angle": r.get("angle"),
+                        "channel": r.get("channel", ""),
+                        "word_count": len(summary.split()),
+                    })
+                else:
+                    # Fallback to description if transcript unavailable
+                    scraped.append({
+                        "url": video_url,
+                        "title": r.get("title", ""),
+                        "summary": r.get("snippet", ""),
+                        "source": "youtube",
+                        "angle": r.get("angle"),
+                        "channel": r.get("channel", ""),
+                        "word_count": len(r.get("snippet", "").split()),
+                    })
+            except Exception as e:
+                self.logger.warning(f"YouTube transcript extraction failed: {e}")
+                # Fallback to description
+                scraped.append({
+                    "url": r.get("url"),
+                    "title": r.get("title", ""),
+                    "summary": r.get("snippet", ""),
+                    "source": "youtube",
+                    "angle": r.get("angle"),
+                    "channel": r.get("channel", ""),
+                    "word_count": len(r.get("snippet", "").split()),
+                })
+        
+        state["scraped_content"] = scraped
+        self.logger.info("Scraped %d pages (web + YouTube transcripts)" % len(scraped))
         return state
     
     async def _extract_node(self, state: ResearchState) -> ResearchState:

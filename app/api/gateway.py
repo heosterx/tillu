@@ -33,9 +33,16 @@ async def verify_auth(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid authorization format")
     
     token = authorization.replace("Bearer ", "")
-    # TODO: Verify JWT with Supabase
-    # For now, return user_id from token or use default
-    return {"user_id": "test-user-id", "token": token}
+    
+    # Verify JWT with Supabase
+    if settings.enable_jwt_verification:
+        from app.security.auth import auth_manager
+        auth_data = auth_manager.verify_token(token)
+        return auth_data
+    else:
+        # Development mode - accept any token
+        logger.warning("JWT verification disabled - development mode only")
+        return {"user_id": "test-user-id", "token": token}
 
 
 @router.post("/message", response_model=MessageResponse)
@@ -52,6 +59,15 @@ async def process_message(
     """
     request_id = str(uuid.uuid4())
     user_id = auth["user_id"]
+    
+    # Apply rate limiting
+    if settings.enable_rate_limiting:
+        from app.middleware.rate_limiter import rate_limiter
+        await rate_limiter.check_limit(
+            key=f"message:{user_id}",
+            limit=settings.rate_limit_per_minute,
+            window=60
+        )
     
     bind_request_context(request_id, user_id)
     

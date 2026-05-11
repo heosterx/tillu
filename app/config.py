@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     coingecko_api_key: Optional[str] = Field(default=None, alias="COINGECKO_API_KEY")
     alpha_vantage_key: Optional[str] = Field(default=None, alias="ALPHA_VANTAGE_KEY")
     openweathermap_key: Optional[str] = Field(default=None, alias="OPENWEATHERMAP_KEY")
+    youtube_api_key: Optional[str] = Field(default=None, alias="YOUTUBE_API_KEY")
     
     # Services
     searxng_url: str = Field(default="https://tillu-ai-tillu-searxng.hf.space", alias="SEARXNG_URL")
@@ -115,6 +116,11 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_per_minute: int = Field(default=60, alias="RATE_LIMIT_PER_MINUTE")
     rate_limit_per_hour: int = Field(default=1000, alias="RATE_LIMIT_PER_HOUR")
+    
+    # Security
+    enable_jwt_verification: bool = Field(default=True, alias="ENABLE_JWT_VERIFICATION")
+    enable_input_validation: bool = Field(default=True, alias="ENABLE_INPUT_VALIDATION")
+    enable_rate_limiting: bool = Field(default=True, alias="ENABLE_RATE_LIMITING")
     
     @validator("cors_origins")
     def parse_cors_origins(cls, v):
