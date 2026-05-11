@@ -163,12 +163,39 @@ class DaemonProcess:
             except asyncio.CancelledError:
                 self.logger.info(f"Loop {loop_config.name} cancelled")
                 raise
+            
+            except asyncio.TimeoutError:
+                self.logger.warning(f"Loop {loop_config.name} timeout")
+                await self._update_loop_state(
+                    loop_config.name, False, 0, "timeout"
+                )
+                # Exponential backoff for timeouts
+                await asyncio.sleep(min(300, loop_config.interval_seconds * 2))
+            
+            except ConnectionError as e:
+                self.logger.error(f"Loop {loop_config.name} connection error: {e}")
+                await self._update_loop_state(
+                    loop_config.name, False, 0, "connection_error"
+                )
+                # Longer backoff for connection errors
+                await asyncio.sleep(60)
+            
+            except ValueError as e:
+                self.logger.error(f"Loop {loop_config.name} validation error: {e}")
+                await self._update_loop_state(
+                    loop_config.name, False, 0, "validation_error"
+                )
+                await asyncio.sleep(30)
+            
             except Exception as e:
                 self.logger.error(
-                    f"Loop {loop_config.name} error: {e}"
+                    f"Loop {loop_config.name} unexpected error: {e}",
+                    exc_info=True
                 )
-                await self._update_loop_state(loop_config.name, False, 0, str(e))
-                # Wait a bit before restarting
+                await self._update_loop_state(
+                    loop_config.name, False, 0, str(e)
+                )
+                # Short backoff for unexpected errors
                 await asyncio.sleep(5)
     
     async def _update_loop_state(

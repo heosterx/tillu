@@ -196,23 +196,8 @@ class AirQualityTool(BaseTool):
                     }
                 else:
                     return {
-        return {
                         "success": False,
                         "error": f"Air quality API returned {response.status_code}"
-                    }
-                    
-        except Exception as e:
-            logger.error(f"Air quality tool error: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
-
-# Register tools
-ToolRegistry.register(WeatherTool())
-ToolRegistry.register(CryptoPriceTool())
-ToolRegistry.register(AirQualityTool())
                     }
                     
         except Exception as e:
