@@ -26,35 +26,40 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("Starting TILLU Gateway...")
     
-    # Check provider availability
+    # Check provider availability (non-blocking)
     try:
         from app.utils.provider_check import check_providers_on_startup
         check_providers_on_startup()
         logger.info("Provider validation passed")
     except Exception as e:
-        logger.error("Provider validation failed", error=str(e))
-        raise
+        logger.warning(f"Provider validation warning: {str(e)}")
+        logger.warning("Continuing startup - some LLM features may be unavailable")
     
-    # Connect to Redis
+    # Connect to Redis (non-blocking)
     try:
         await cache.connect()
         logger.info("Redis connected")
     except Exception as e:
-        logger.error("Failed to connect to Redis", error=str(e))
-        # Continue without Redis - service can still function
+        logger.warning(f"Failed to connect to Redis: {str(e)}")
+        logger.warning("Continuing without Redis - service can still function")
     
-    # Connect to Supabase
+    # Connect to Supabase (blocking - required)
     try:
         db.connect()
         logger.info("Supabase client initialized")
     except Exception as e:
-        logger.error("Failed to initialize Supabase", error=str(e))
+        logger.error(f"Failed to initialize Supabase: {str(e)}")
+        logger.error("Cannot start without database connection")
         raise
     
-    # Register all chains (Phase 3)
-    from app.chains.base import ChainRegistry
-    ChainRegistry.register_all()
-    logger.info("All chains registered")
+    # Register all chains (non-blocking)
+    try:
+        from app.chains.base import ChainRegistry
+        ChainRegistry.register_all()
+        logger.info("All chains registered")
+    except Exception as e:
+        logger.warning(f"Failed to register chains: {str(e)}")
+        logger.warning("Continuing without chains - basic API will work")
     
     logger.info("TILLU Gateway started successfully")
     
@@ -62,7 +67,10 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down TILLU Gateway...")
-    await cache.disconnect()
+    try:
+        await cache.disconnect()
+    except Exception as e:
+        logger.warning(f"Error during cache disconnect: {str(e)}")
     logger.info("TILLU Gateway stopped")
 
 

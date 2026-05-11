@@ -107,7 +107,8 @@ def check_providers_on_startup():
             logger.warning(issue)
     
     if not is_valid:
-        logger.error("Provider validation failed - application may not work correctly")
-        raise RuntimeError("No LLM providers available. Please configure at least one provider.")
+        logger.warning("No LLM providers available - application will have limited functionality")
+        logger.warning("Please configure at least one provider: GROQ_API_KEY, TOGETHER_API_KEY, or HF_TOKEN")
+        # Don't raise - allow app to start with degraded functionality
     
     ProviderChecker.log_provider_status()
