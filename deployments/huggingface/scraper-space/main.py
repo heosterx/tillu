@@ -36,7 +36,7 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(name)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
 )
-logger = logging.getLogger('tillu.websearch')
+logger = logging.getLogger('tillu.scraper')
 
 SEARXNG_URL: str = os.getenv('SEARXNG_URL', '').rstrip('/')
 DDG_JSON_URL = 'https://api.duckduckgo.com/'
@@ -252,9 +252,11 @@ class ScrapeResponse(BaseModel):
     url: str
     title: str
     text: str
-    links: list[str]
+    links: list[str] = []
     success: bool
     error: str | None = None
+    scrape_method: str = 'unknown'
+    metadata: dict[str, Any] = {}
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
@@ -317,15 +319,16 @@ async def close_browser():
 
 @asynccontextmanager
 async def lifespan(app):
-    logger.info('TILLU WebSearch v2 starting')
+    logger.info('TILLU Scraper v2 starting')
     logger.info('SearXNG: ' + (SEARXNG_URL or 'NOT SET - DDG fallback active'))
     logger.info('Groq: ' + ('configured' if GROQ_API_KEY else 'not set'))
+    logger.info('Crawl4AI: ' + ('available' if CRAWL4AI_AVAILABLE else 'not available - using Playwright'))
     await get_browser()
     yield
     await close_browser()
 
 app = FastAPI(
-    title='TILLU WebSearch v2',
+    title='TILLU Scraper v2',
     description='JARVIS-grade search + scrape + intelligence',
     version='2.0.0',
     default_response_class=ORJSONResponse,
@@ -707,19 +710,27 @@ async def scrape_with_crawl4ai(url: str) -> ScrapeResponse:
         async with AsyncWebCrawler(config=browser_config) as crawler:
             result = await crawler.arun(url=url, config=run_config)
             
+            # Extract links from crawl4ai result
+            links = []
+            if hasattr(result, 'links') and result.links:
+                internal = result.links.get('internal', [])
+                external = result.links.get('external', [])
+                links = list(dict.fromkeys(internal + external))[:50]
+            
+            # Get content - prefer markdown, fallback to cleaned text
+            content = result.markdown or result.cleaned_text or result.text or ''
+            
             return ScrapeResponse(
                 url=str(result.url),
-                title=result.metadata.get('title', ''),
-                content=result.markdown or result.cleaned_text or result.text,
-                html=None,  # Crawl4AI returns markdown by default
-                text=result.cleaned_text or result.text,
-                status=200,
+                title=result.metadata.get('title', '') if hasattr(result, 'metadata') else '',
+                text=content[:12000],  # Limit to 12k chars
+                links=links,
+                success=True,
                 scrape_method='crawl4ai',
-                links=[],
                 metadata={
-                    'crawl4ai_success': result.success,
-                    'links_found': len(result.links.get('internal', [])) + len(result.links.get('external', [])),
-                    'images_found': len(result.media.get('images', [])),
+                    'crawl4ai_success': getattr(result, 'success', True),
+                    'links_found': len(links),
+                    'content_length': len(content),
                 }
             )
     except Exception as e:
@@ -733,6 +744,7 @@ async def scrape_with_crawl4ai(url: str) -> ScrapeResponse:
 async def scrape_url(url: str, extract_text: bool = True) -> ScrapeResponse:
     browser = await get_browser()
     ctx = None
+    page = None
     try:
         ctx = await browser.new_context(
             viewport={'width': 1280, 'height': 800},
@@ -743,13 +755,21 @@ async def scrape_url(url: str, extract_text: bool = True) -> ScrapeResponse:
         page = await ctx.new_page()
 
         async def block_heavy(route):
-            if route.request.resource_type in ('image', 'media', 'font', 'stylesheet', 'websocket'):
-                await route.abort()
-            else:
-                await route.continue_()
+            try:
+                if route.request.resource_type in ('image', 'media', 'font', 'stylesheet', 'websocket'):
+                    await route.abort()
+                else:
+                    await route.continue_()
+            except Exception:
+                pass
 
         await page.route('**/*', block_heavy)
-        await page.goto(url, wait_until='domcontentloaded', timeout=20000)
+        
+        try:
+            await page.goto(url, wait_until='domcontentloaded', timeout=20000)
+        except Exception as e:
+            logger.warning('Page load timeout for %s: %s, continuing with partial content', url, e)
+        
         await page.wait_for_timeout(1200)
 
         title = await page.title()
@@ -762,14 +782,37 @@ async def scrape_url(url: str, extract_text: bool = True) -> ScrapeResponse:
         links = list(dict.fromkeys(links_raw))[:50]
         text = _extract_readable(html, url) if extract_text else ''
         logger.info('Scraped: %s -> %d chars, %d links', url, len(text), len(links))
-        return ScrapeResponse(url=url, title=title, text=text, links=links, success=True)
+        return ScrapeResponse(
+            url=url, 
+            title=title, 
+            text=text, 
+            links=links, 
+            success=True,
+            scrape_method='playwright'
+        )
 
     except Exception as e:
         logger.error('Scrape failed for %s: %s', url, e)
-        return ScrapeResponse(url=url, title='', text='', links=[], success=False, error=str(e))
+        return ScrapeResponse(
+            url=url, 
+            title='', 
+            text='', 
+            links=[], 
+            success=False, 
+            error=str(e),
+            scrape_method='playwright'
+        )
     finally:
+        if page:
+            try:
+                await page.close()
+            except Exception:
+                pass
         if ctx:
-            await ctx.close()
+            try:
+                await ctx.close()
+            except Exception:
+                pass
 
 def _extract_readable(html: str, url: str) -> str:
     try:
@@ -869,7 +912,7 @@ async def rate_limit_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 @app.get('/health', response_class=ORJSONResponse)
 async def health():
-    return {'status': 'ok', 'service': 'tillu-websearch', 'version': '2.0.0'}
+    return {'status': 'ok', 'service': 'tillu-scraper', 'version': '2.0.0'}
 
 @app.get('/status', response_class=ORJSONResponse)
 async def service_status():
@@ -881,12 +924,16 @@ async def service_status():
         except Exception:
             searxng_ok = False
     return {
-        'service': 'tillu-websearch',
+        'service': 'tillu-scraper',
         'version': '2.0.0',
         'engines': {
             'searxng': {'url': SEARXNG_URL or 'not configured', 'healthy': searxng_ok},
             'duckduckgo': {'status': 'fallback'},
             'google_lite': {'status': 'last_resort'},
+        },
+        'scrapers': {
+            'crawl4ai': {'available': CRAWL4AI_AVAILABLE, 'type': 'primary'},
+            'playwright': {'available': True, 'type': 'fallback'},
         },
         'groq_configured': bool(GROQ_API_KEY),
         'cache_size': len(_search_cache),

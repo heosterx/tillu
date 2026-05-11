@@ -1,5 +1,5 @@
 ---
-title: TILLU WebSearch
+title: TILLU Scraper
 emoji: 🔍
 colorFrom: green
 colorTo: blue
@@ -9,7 +9,7 @@ license: mit
 short_description: JARVIS-grade search + scrape + intelligence
 ---
 
-# TILLU WebSearch v2
+# TILLU Scraper v2
 
 JARVIS-grade unified web search, scraping, and AI intelligence service.
 
@@ -45,7 +45,7 @@ Crawl4AI provides:
 
 ## Deployment
 
-1. Create new HuggingFace Space: `tillu-ai-tillu-websearch`
+1. Create new HuggingFace Space: `tillu-ai-tillu-scraper`
 2. SDK: Docker
 3. Copy files:
    - `Dockerfile`

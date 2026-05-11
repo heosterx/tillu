@@ -1,5 +1,5 @@
-# TILLU WebSearch v2 - HuggingFace Space
-# SearXNG (primary) + DDG JSON + Google Lite fallbacks + Playwright
+# TILLU Scraper v2 - HuggingFace Space
+# SearXNG (primary) + DDG JSON + Google Lite fallbacks + Crawl4AI + Playwright
 
 FROM python:3.13-slim
 
