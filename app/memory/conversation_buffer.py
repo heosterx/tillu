@@ -117,7 +117,7 @@ class ConversationBuffer:
             return messages
         
         elif format_type == "langchain":
-            from langchain.schema import HumanMessage, AIMessage
+            from langchain_core.messages import HumanMessage, AIMessage
             formatted = []
             for msg in messages:
                 if msg["role"] == "user":

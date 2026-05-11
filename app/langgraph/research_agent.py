@@ -14,8 +14,8 @@ import time
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
 from langchain_cerebras import ChatCerebras
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import SystemMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.config import settings
 from app.utils.logging import get_logger

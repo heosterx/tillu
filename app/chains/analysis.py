@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 import time
 import json
 from pydantic import BaseModel, Field
-from langchain.output_parsers import PydanticOutputParser
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_cerebras import ChatCerebras
 from langchain_groq import ChatGroq
 

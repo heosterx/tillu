@@ -9,7 +9,7 @@ Output: Action results + natural language explanation
 from typing import Any, Dict, List, Optional
 import time
 from langchain.agents import AgentExecutor, create_react_agent
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.config import settings
